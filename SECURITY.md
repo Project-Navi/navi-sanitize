@@ -10,7 +10,7 @@
 
 **Do not open a public issue.** Instead, email the maintainer directly:
 
-- **Email:** ndspence@pm.me
+- **Email:** security@projectnavi.ai
 - **Subject prefix:** `[navi-sanitize] SECURITY:`
 
 Include:

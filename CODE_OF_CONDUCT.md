@@ -21,7 +21,7 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to the project maintainer at ndspence@pm.me. All reports will be reviewed and investigated promptly and fairly.
+Instances of unacceptable behavior may be reported to the project maintainer at security@projectnavi.ai. All reports will be reviewed and investigated promptly and fairly.
 
 The project maintainer has the right and responsibility to remove, edit, or reject contributions that are not aligned with this Code of Conduct, and to temporarily or permanently restrict any contributor for behavior they deem inappropriate.
 
