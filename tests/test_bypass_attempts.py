@@ -27,7 +27,7 @@ class TestHomoglyphMapGaps:
 
     def test_armenian_seh(self) -> None:
         # Armenian Ս (U+054D) looks like Latin S
-        result = clean("\u054Derver")
+        result = clean("\u054derver")
         assert result == "Server", f"Armenian Ս slipped through: {result!r}"
 
     # --- Cherokee lookalikes ---

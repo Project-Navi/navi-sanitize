@@ -33,7 +33,24 @@ uv run mypy src/navi_sanitize/
 
 # Build wheel
 uv build
+
+# Pre-commit setup (one-time)
+pre-commit install
+
+# Run all pre-commit hooks
+pre-commit run --all-files
 ```
+
+## CI
+
+GitHub Actions runs on push to `main` and all PRs. Four parallel jobs:
+
+- **lint** — `ruff check` + `ruff format --check`
+- **typecheck** — `mypy --strict src/navi_sanitize/`
+- **test** — pytest across Python 3.12 + 3.13, `--benchmark-disable`
+- **build** — gates on all three above; builds wheel, smoke-tests public API, uploads artifact
+
+Benchmarks run via manual dispatch only (`.github/workflows/benchmark.yml`).
 
 ## Architecture
 

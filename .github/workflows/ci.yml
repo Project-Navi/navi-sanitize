@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Ruff check
+        run: uv run ruff check src/ tests/
+      - name: Ruff format
+        run: uv run ruff format --check src/ tests/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Mypy
+        run: uv run mypy --strict src/navi_sanitize/
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen --python ${{ matrix.python-version }}
+      - name: Run tests
+        run: uv run pytest tests/ -v --benchmark-disable
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Build wheel
+        run: uv build
+      - name: Smoke test
+        run: |
+          uv venv .smoke-venv
+          .smoke-venv/bin/pip install dist/*.whl
+          .smoke-venv/bin/python -c "
+          from navi_sanitize import clean, walk, jinja2_escaper, path_escaper
+          assert clean('hello') == 'hello'
+          assert walk({'k': 'v'}) == {'k': 'v'}
+          print('Smoke test passed')
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl

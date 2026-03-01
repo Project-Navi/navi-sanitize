@@ -53,7 +53,7 @@ class TestSizeExtremes:
         assert clean(big) == big
 
     def test_1mb_hostile_string(self) -> None:
-        big = ("n\u0430vi\x00\u200b" * 100000)[:1024 * 1024]
+        big = ("n\u0430vi\x00\u200b" * 100000)[: 1024 * 1024]
         result = clean(big)
         assert "\x00" not in result
         assert "\u200b" not in result
@@ -122,7 +122,7 @@ class TestUnicodeEdgeCases:
 
     def test_max_codepoint(self) -> None:
         # U+10FFFF — max Unicode codepoint
-        assert clean("a\U0010FFFFb") == "a\U0010FFFFb"
+        assert clean("a\U0010ffffb") == "a\U0010ffffb"
 
     def test_surrogate_boundary(self) -> None:
         # Characters just outside the tag block range
@@ -177,6 +177,7 @@ class TestEscaperAbuse:
 
     def test_escaper_that_adds_hostile_chars(self) -> None:
         """Escaper injects garbage — pipeline doesn't re-run."""
+
         def evil_escaper(s: str) -> str:
             return s + "\x00\u200b\u0430"
 
@@ -336,9 +337,7 @@ class TestLoggingEdgeCases:
                 clean("perfectly safe")
         assert caplog.text == ""
 
-    def test_warnings_dont_accumulate_across_calls(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_warnings_dont_accumulate_across_calls(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
             clean("n\u0430vi")
         first_count = caplog.text.count("homoglyph")
