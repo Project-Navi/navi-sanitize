@@ -348,6 +348,9 @@ class TestPublicAPIContract:
         assert hasattr(navi_sanitize, "__version__")
         assert set(navi_sanitize.__all__) == {
             "clean",
+            "decode_evasion",
+            "detect_scripts",
+            "is_mixed_script",
             "walk",
             "jinja2_escaper",
             "path_escaper",

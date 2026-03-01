@@ -18,6 +18,8 @@ clean("price:\u200b 0")  # "price: 0" — zero-width space stripped
 clean("file\x00.txt")  # "file.txt" — null byte removed
 ```
 
+Opt-in utilities for deeper analysis: `decode_evasion()` peels nested URL/HTML/hex encodings, `detect_scripts()` and `is_mixed_script()` flag mixed-script spoofing.
+
 ## Why This Matters
 
 Untrusted text contains invisible attacks: homoglyph substitution, zero-width characters, null bytes, fullwidth encoding, template/prompt injection delimiters. These bypass validation, poison templates, and fool humans.
@@ -105,6 +107,33 @@ from navi_sanitize import walk
 # Recursively sanitize every string in a dict/list
 spec = walk(untrusted_json)
 ```
+
+## Opt-in Utilities
+
+**These utilities are not part of `clean()` and are never run automatically.** You must call them explicitly.
+
+```python
+from navi_sanitize import decode_evasion, clean, detect_scripts, is_mixed_script, path_escaper
+
+# Double-encoded path traversal
+raw = "%252e%252e%252fetc%252fpasswd"
+
+# 1. Peel nested encodings (URL → HTML entities → hex escapes)
+peeled = decode_evasion(raw)           # "../etc/passwd"
+
+# 2. Sanitize through the universal pipeline
+cleaned = clean(peeled, escaper=path_escaper)  # "etc/passwd"
+
+# 3. Check for mixed-script spoofing (useful on raw or pre-clean input)
+if is_mixed_script(raw) or is_mixed_script(peeled):
+    flag_for_review(raw)
+```
+
+- **`decode_evasion(text, *, max_layers=3)`** — iterative URL/HTML/hex decoding; stops when a pass produces no change
+- **`detect_scripts(text)`** — returns script buckets present in text (`latin`, `cyrillic`, `greek`, etc.)
+- **`is_mixed_script(text)`** — `True` when 2+ scripts detected
+
+Script detection can be applied pre-clean too — most useful on raw input for phishing detection.
 
 ## Warnings
 
