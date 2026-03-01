@@ -83,7 +83,7 @@ jobs:
       - name: Smoke test
         run: |
           uv venv .smoke-venv
-          .smoke-venv/bin/pip install dist/*.whl
+          uv pip install dist/*.whl --python .smoke-venv/bin/python
           .smoke-venv/bin/python -c "
           from navi_sanitize import clean, walk, jinja2_escaper, path_escaper
           assert clean('hello') == 'hello'
