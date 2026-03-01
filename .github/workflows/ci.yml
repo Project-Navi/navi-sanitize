@@ -56,8 +56,17 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
         run: uv sync --frozen --python "$PYTHON_VERSION"
-      - name: Run tests
-        run: uv run pytest tests/ -v --benchmark-disable
+      - name: Run tests with coverage
+        run: |
+          uv pip install coverage
+          uv run coverage run -m pytest tests/ -v --benchmark-disable
+          uv run coverage xml -o coverage.xml --include='src/navi_sanitize/**'
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
 
   security:
     runs-on: ubuntu-latest
