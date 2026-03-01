@@ -19,7 +19,7 @@ ZERO_WIDTH_CHARS: set[str] = {
     "\u180e",  # Mongolian vowel separator
 }
 
-# --- Unicode Tag block (U+E0001–U+E007F) ---
+# --- Unicode Tag block (U+E0001-U+E007F) ---
 # Encodes invisible ASCII that tokenizers read but humans can't see.
 # Used in tag smuggling attacks against LLMs.
 TAG_BLOCK_RANGE = (0xE0001, 0xE007F)
