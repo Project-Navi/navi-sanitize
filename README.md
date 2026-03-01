@@ -18,11 +18,44 @@ clean("price:\u200b 0")  # "price: 0" — zero-width space stripped
 clean("file\x00.txt")  # "file.txt" — null byte removed
 ```
 
-## Why
+## Why This Matters
 
 Untrusted text contains invisible attacks: homoglyph substitution, zero-width characters, null bytes, fullwidth encoding, template/prompt injection delimiters. These bypass validation, poison templates, and fool humans.
 
 navi-sanitize fixes the text before it reaches your application. It doesn't detect attacks — it removes them.
+
+**LLM prompt pipelines** — User input flows into system prompts, RAG context, and tool calls. Invisible Unicode (tag block characters, bidi overrides) encodes instructions that tokenizers read but humans can't see. Homoglyphs bypass keyword filters. navi-sanitize strips these vectors before text reaches the model, and the pluggable escaper lets you add vendor-specific prompt escaping on top.
+
+**Web applications** — Jinja2 SSTI, path traversal, and fullwidth encoding bypasses are well-known but tedious to cover manually. A single `clean(user_input, escaper=jinja2_escaper)` call handles homoglyph-disguised payloads like `{{ cоnfig }}` (Cyrillic `о`) that naive escaping misses.
+
+**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
+
+**Log analysis and SIEM** — Attackers embed bidi overrides and zero-width characters in log entries to hide indicators of compromise from analysts and pattern-matching tools. Sanitizing log data on ingest ensures what you search is what's actually there.
+
+**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
+
+## How It Compares
+
+navi-sanitize is the only library that combines invisible character stripping, homoglyph replacement, NFKC normalization, and pluggable escaping in a single zero-dependency pipeline. Existing tools solve pieces of this problem:
+
+| | navi-sanitize | Unidecode / anyascii | confusable_homoglyphs | ftfy | MarkupSafe / nh3 |
+|---|---|---|---|---|---|
+| **Purpose** | Security sanitization | ASCII transliteration | Homoglyph detection | Encoding repair | HTML escaping |
+| **Invisible chars** | Strips 411 (bidi, tag block, ZW, VS) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
+| **Homoglyphs** | Replaces 51 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
+| **NFKC** | Yes | No | No | NFC (NFKC optional) | No |
+| **Null bytes** | Yes | No | No | No | No |
+| **Preserves Unicode** | Yes (CJK, Arabic, emoji intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
+| **Pluggable escaper** | Yes | No | No | No | N/A (HTML-specific) |
+| **Dependencies** | Zero | Zero | Zero | wcwidth | C ext / Rust ext |
+
+**Key differences:**
+
+- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 51 highest-risk lookalikes and leaves legitimate Unicode intact.
+- **confusable_homoglyphs** uses the full Unicode Consortium confusables dataset (thousands of pairs) but only *detects* — you'd need to write your own replacement layer. It's also archived.
+- **ftfy** is complementary, not competing. It fixes encoding corruption and explicitly *preserves* bidi overrides and zero-width characters that navi-sanitize strips. Different threat model.
+- **MarkupSafe / nh3** handle HTML structure; navi-sanitize handles the character-level content *inside* that structure. They compose naturally.
+- **pydantic / cerberus** are validation frameworks — call `navi_sanitize.clean()` inside a pydantic `AfterValidator` or cerberus coercion chain for validated, sanitized output.
 
 ## Pipeline
 
