@@ -114,6 +114,22 @@ class TestHomoglyphReplacement:
         assert "3" in caplog.text
         assert "homoglyph" in caplog.text.lower()
 
+    def test_homoglyph_combining_mark_idempotent(self) -> None:
+        """Regression: Greek U+03A5 + combining tilde -> Latin Y + tilde -> NFKC U+1EF8.
+
+        Without re-normalization after homoglyph replacement, a second clean()
+        pass would compose Y+combining tilde into U+1EF8, violating idempotency.
+        """
+        from navi_sanitize import clean
+
+        # Greek upsilon (U+03A5) followed by combining tilde (U+0303)
+        text = "\u03a5\u0303"
+        first = clean(text)
+        second = clean(first)
+        assert first == second, f"Not idempotent: {first!r} != {second!r}"
+        # Should be the precomposed form
+        assert first == "\u1ef8"  # Ỹ (LATIN CAPITAL LETTER Y WITH TILDE)
+
 
 class TestCleanPassthrough:
     def test_clean_text_unchanged(self) -> None:

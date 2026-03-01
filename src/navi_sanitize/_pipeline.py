@@ -91,6 +91,10 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     text, glyph_count = _replace_homoglyphs(text)
     if glyph_count:
         logger.warning("Replaced %d homoglyph(s) in value", glyph_count)
+        # Re-normalize: homoglyph replacement can produce Latin chars that
+        # combine with adjacent combining marks (e.g. Greek U+03A5 + combining
+        # tilde -> Latin Y + combining tilde -> NFKC composes to U+1EF8).
+        text, _ = _normalize_nfkc(text)
 
     # Stage 5: Escaper
     if escaper is not None:
