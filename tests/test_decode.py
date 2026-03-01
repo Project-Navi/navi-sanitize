@@ -107,6 +107,26 @@ class TestDecodeInvalidEncoding:
     def test_incomplete_hex_escape(self) -> None:
         assert decode_evasion("\\x2") == "\\x2"
 
+    def test_malformed_utf8_percent_preserved(self) -> None:
+        """%FF is not valid UTF-8 — must pass through unchanged."""
+        assert decode_evasion("%FF") == "%FF"
+
+    def test_lone_continuation_byte_preserved(self) -> None:
+        """%80 is a continuation byte without a start — must be preserved."""
+        assert decode_evasion("%80") == "%80"
+
+    def test_truncated_multibyte_preserved(self) -> None:
+        """%C3 without a following byte — must be preserved."""
+        assert decode_evasion("%C3") == "%C3"
+
+    def test_valid_multibyte_still_decodes(self) -> None:
+        """%C3%A9 is valid UTF-8 for é — must decode normally."""
+        assert decode_evasion("%C3%A9") == "é"
+
+    def test_mixed_valid_and_malformed(self) -> None:
+        """Valid sequences decode, malformed ones stay as percent-encoded."""
+        assert decode_evasion("%C3%A9%FF") == "é%FF"
+
 
 class TestDecodeLogging:
     """Warning logging tests."""

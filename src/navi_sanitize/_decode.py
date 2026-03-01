@@ -27,8 +27,25 @@ _HEX_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
 
 
 def _decode_url(s: str) -> str:
-    """Decode URL percent-encoding."""
-    return urllib.parse.unquote(s)
+    """Decode URL percent-encoding, preserving malformed byte sequences.
+
+    Valid UTF-8 percent-encoded sequences decode normally.
+    Invalid byte sequences (e.g. ``%FF``, lone ``%80``) are kept
+    as literal percent-encoded text instead of being replaced with
+    U+FFFD.
+    """
+    raw = urllib.parse.unquote_to_bytes(s)
+    # Decode valid UTF-8; map invalid bytes to surrogates so we can
+    # re-encode them back to %XX in the next step.
+    text = raw.decode("utf-8", errors="surrogateescape")
+    # Re-encode any lone surrogates (from invalid bytes) back to %XX
+    parts: list[str] = []
+    for ch in text:
+        if "\udc80" <= ch <= "\udcff":
+            parts.append(f"%{ord(ch) & 0xFF:02X}")
+        else:
+            parts.append(ch)
+    return "".join(parts)
 
 
 def _decode_html_entities(s: str) -> str:

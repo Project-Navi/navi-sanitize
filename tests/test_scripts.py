@@ -75,6 +75,11 @@ class TestDetectScripts:
     def test_latin_with_punctuation(self) -> None:
         assert detect_scripts("hello, world!") == {"latin"}
 
+    def test_unnamed_alpha_char_ignored(self) -> None:
+        """Alphabetic chars with no Unicode name are silently skipped."""
+        # U+17000 (Tangut Ideograph) — isalpha() but no unicodedata.name()
+        assert detect_scripts("\U00017000") == set()
+
 
 class TestDetectScriptsPhishing:
     """Phishing detection scenarios."""
