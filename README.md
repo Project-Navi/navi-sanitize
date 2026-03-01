@@ -69,9 +69,10 @@ Every string passes through stages in order. Each stage returns clean output and
 | Invisibles | Strip zero-width, Unicode Tag block, bidi controls |
 | NFKC | Normalize fullwidth ASCII to standard ASCII |
 | Homoglyphs | Replace Cyrillic/Greek lookalikes with Latin equivalents |
+| Re-NFKC | Re-normalize after homoglyph replacement (ensures idempotency) |
 | **Escaper** | Pluggable — you choose what to escape for |
 
-The first four stages are universal. The escaper is where you tell the pipeline what the output is for.
+The first five stages are universal. The escaper is where you tell the pipeline what the output is for.
 
 ## Escapers
 
