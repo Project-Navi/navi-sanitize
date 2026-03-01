@@ -48,22 +48,22 @@ Three exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=Non
 Five stages in strict order — reordering breaks security:
 
 1. **Null byte removal** — strip `\x00` (prevents C-extension truncation)
-2. **Invisible character stripping** — single compiled regex covering zero-width chars, Unicode Tag block (`U+E0001`–`U+E007F`), and bidi overrides
+2. **Invisible character stripping** — single compiled regex covering zero-width chars, format/control chars, variation selectors, Unicode Tag block (`U+E0001`-`U+E007F`), and bidi overrides
 3. **NFKC normalization** — collapses fullwidth ASCII and compatibility forms
-4. **Homoglyph replacement** — character-by-character scan against 42-pair map in `_homoglyphs.py`
+4. **Homoglyph replacement** — character-by-character scan against 51-pair map in `_homoglyphs.py`
 5. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
 
 Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effects — the orchestrator logs.
 
 ### Data files
 
-- `_homoglyphs.py` — 42 Cyrillic/Greek/typographic pairs
-- `_invisible.py` — zero-width, Tag block, and bidi character sets
+- `_homoglyphs.py` — 51 pairs: Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes
+- `_invisible.py` — zero-width, format/control (soft hyphen, thin/hair space, line/paragraph separators, etc.), variation selectors, Tag block, and bidi character sets
 
 ### Escapers (`escapers/`)
 
-- `_jinja2.py` — backslash-escapes `{{`, `}}`, `{%`, `%}`, `{#`, `#}` (not Jinja2 safe-string pattern)
-- `_path.py` — strips `../`, `./`, leading `/`
+- `_jinja2.py` — single-pass regex backslash-escapes `{{`, `}}`, `{%`, `%}`, `{#`, `#}` and brace runs of 2+ (handles triple braces)
+- `_path.py` — strips `../`, `./`, leading `/`, and embedded `..` within segments (handles null-byte concatenation artifacts)
 
 ## Conventions
 
@@ -73,12 +73,12 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 - **Test oracle:** for inputs covered by navi-bootstrap's adversarial suite, `clean(text, escaper=jinja2_escaper)` must match navi-bootstrap's `_sanitize_string(text, escape_jinja=True)` exactly
 - **Warnings include counts:** `"Stripped 3 invisible character(s)"` not `"Stripped invisible character(s)"`
 - **`NullHandler` on library logger** — app configures handlers, not the library
-- **`walk()` uses `deepcopy`** — original data never modified; `TypeVar("T")` for return type
+- **`walk()` uses `deepcopy`** — original data never modified; PEP 695 `def walk[T]()` for return type
 - **No remote push** without explicit approval — local only until told otherwise
 
 ## Gotchas
 
-- **`ruff` rule `RUF003`** fires on intentional Cyrillic/Greek in test files — use `# ruff: noqa: RUF003` at top of those files
+- **`ruff` rules `RUF001`/`RUF003`** fire on intentional Cyrillic/Greek/Armenian/Cherokee in test and data files — use `# ruff: noqa: RUF001, RUF003` or `# ruff: noqa: RUF003` at top of those files
 - **Tag block range starts at `U+E0001`**, not `U+E0000`
 - **pytest-benchmark `pedantic()`** required for large payloads (100KB) — standard mode runs too many iterations
 - **No CLI, no config files, no framework dependencies** — this is a library only

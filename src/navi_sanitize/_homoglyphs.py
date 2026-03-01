@@ -1,8 +1,9 @@
+# ruff: noqa: RUF003
 # SPDX-License-Identifier: MIT
 """Homoglyph mapping data for confusable character replacement.
 
 Data module — contains no logic, only the character map.
-42 pairs: Cyrillic, Greek, and typographic lookalikes.
+Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes.
 """
 
 from __future__ import annotations
@@ -16,6 +17,10 @@ HOMOGLYPH_MAP: dict[str, str] = {
     "\u0441": "c",
     "\u0443": "y",
     "\u0445": "x",
+    "\u0456": "i",  # Byelorussian-Ukrainian і
+    "\u0455": "s",  # dze ѕ
+    "\u0458": "j",  # je ј
+    "\u04bb": "h",  # shha һ
     # Cyrillic → Latin (uppercase)
     "\u0410": "A",
     "\u0412": "B",
@@ -28,6 +33,14 @@ HOMOGLYPH_MAP: dict[str, str] = {
     "\u0421": "C",
     "\u0422": "T",
     "\u0425": "X",
+    "\u0406": "I",  # Byelorussian-Ukrainian І
+    "\u0405": "S",  # dze Ѕ
+    "\u0408": "J",  # je Ј
+    # Armenian → Latin
+    "\u0555": "O",  # oh Օ
+    "\u054d": "S",  # seh Ս
+    # Cherokee → Latin
+    "\u13aa": "A",  # go Ꭺ
     # Greek → Latin (uppercase)
     "\u0391": "A",
     "\u0392": "B",

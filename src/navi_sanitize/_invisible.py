@@ -2,7 +2,7 @@
 """Invisible character sets for stripping from untrusted text.
 
 Data module — contains no logic, only character definitions.
-Three categories: zero-width, Unicode Tag block, bidirectional controls.
+Categories: zero-width, format/control, Unicode Tag block, bidirectional controls.
 """
 
 from __future__ import annotations
@@ -18,6 +18,25 @@ ZERO_WIDTH_CHARS: set[str] = {
     "\ufeff",  # BOM / zero-width no-break space
     "\u180e",  # Mongolian vowel separator
 }
+
+# --- Format and control characters ---
+# Invisible or near-invisible characters used in evasion attacks.
+FORMAT_CHARS: set[str] = {
+    "\u00ad",  # soft hyphen — invisible in most renderers
+    "\u034f",  # combining grapheme joiner
+    "\u2009",  # thin space
+    "\u200a",  # hair space
+    "\u2028",  # line separator (also XSS vector in JS)
+    "\u2029",  # paragraph separator
+    "\ufff9",  # interlinear annotation anchor
+    "\ufffa",  # interlinear annotation separator
+    "\ufffb",  # interlinear annotation terminator
+    "\ufffc",  # object replacement character
+}
+
+# --- Variation selectors (U+FE00-U+FE0F) ---
+# Invisible modifiers that change glyph presentation.
+VARIATION_SELECTOR_RANGE = (0xFE00, 0xFE0F)
 
 # --- Unicode Tag block (U+E0001-U+E007F) ---
 # Encodes invisible ASCII that tokenizers read but humans can't see.
@@ -43,6 +62,16 @@ _INVISIBLE_CHARS = (
     # Zero-width (individual chars)
     "["
     + "".join(ZERO_WIDTH_CHARS)
+    + "]"
+    # Format/control (individual chars)
+    + "|["
+    + "".join(FORMAT_CHARS)
+    + "]"
+    # Variation selectors (range)
+    + "|["
+    + chr(VARIATION_SELECTOR_RANGE[0])
+    + "-"
+    + chr(VARIATION_SELECTOR_RANGE[1])
     + "]"
     # Tag block (range)
     + "|["
