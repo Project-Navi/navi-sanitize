@@ -29,7 +29,7 @@ from [conventional commits](https://www.conventionalcommits.org/).
 ### Features
 
 - Add jinja2 and path escapers
-- Core pipeline — clean() with 4 universal stages
+- Core pipeline — clean() with 5 universal stages + pluggable escaper
 - Add homoglyph mapping data (42 pairs)
 - Add invisible character data module and first test skeleton
 
