@@ -1,0 +1,47 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 3" # Wednesday 03:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [fuzz_clean]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7.3.1
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+          uv pip install atheris
+      - name: Run fuzzer
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
+        run: |
+          uv run python "fuzz/${FUZZ_TARGET}.py" -atheris_runs=100000 -max_len=4096
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: fuzz-crash-${{ matrix.target }}
+          path: |
+            crash-*
+            oom-*
+            timeout-*
