@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "deps:"
+    reviewers:
+      - "ndspence"
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci:"
+    reviewers:
+      - "ndspence"
+    groups:
+      actions:
+        patterns: ["*"]

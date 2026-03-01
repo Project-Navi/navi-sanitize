@@ -1,0 +1,30 @@
+name: Semgrep SAST
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.152.0
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run Semgrep
+        run: semgrep scan --config p/python --config p/owasp-top-ten --sarif -o semgrep.sarif .
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
+        if: always()
+        with:
+          sarif_file: semgrep.sarif

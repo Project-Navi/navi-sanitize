@@ -9,12 +9,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -27,8 +31,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -43,21 +47,35 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           enable-cache: true
       - name: Install dependencies
-        run: uv sync --frozen --python ${{ matrix.python-version }}
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: uv sync --frozen --python "$PYTHON_VERSION"
       - name: Run tests
         run: uv run pytest tests/ -v --benchmark-disable
 
-  build:
-    needs: [lint, typecheck, test]
+  security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: pip-audit
+        run: uvx pip-audit==2.9.0
+
+  build:
+    needs: [lint, typecheck, test, security]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7.3.0
         with:
           enable-cache: true
       - name: Build wheel
@@ -72,7 +90,7 @@ jobs:
           assert walk({'k': 'v'}) == {'k': 'v'}
           print('Smoke test passed')
           "
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wheel
           path: dist/*.whl
