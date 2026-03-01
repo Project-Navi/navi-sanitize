@@ -43,12 +43,15 @@ pre-commit run --all-files
 
 ## CI
 
-GitHub Actions runs on push to `main` and all PRs. Four parallel jobs:
+GitHub Actions runs on push to `main` and all PRs. Five parallel jobs:
 
 - **lint** — `ruff check` + `ruff format --check`
 - **typecheck** — `mypy --strict src/navi_sanitize/`
 - **test** — pytest across Python 3.12 + 3.13, `--benchmark-disable`
-- **build** — gates on all three above; builds wheel, smoke-tests public API, uploads artifact
+- **security** — `pip-audit` dependency vulnerability scan
+- **build** — gates on all four above; builds wheel, smoke-tests public API, uploads artifact
+
+Additional security workflows: Semgrep SAST, CodeQL (`python` + `actions`), OpenSSF Scorecard.
 
 Benchmarks run via manual dispatch only (`.github/workflows/benchmark.yml`).
 
@@ -96,7 +99,7 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 ## Gotchas
 
 - **`ruff` rules `RUF001`/`RUF003`** fire on intentional Cyrillic/Greek/Armenian/Cherokee in test and data files — use `# ruff: noqa: RUF001, RUF003` or `# ruff: noqa: RUF003` at top of those files
-- **Tag block range starts at `U+E0001`**, not `U+E0000`
+- **Tag block range starts at `U+E0000`** (includes the deprecated LANGUAGE TAG character)
 - **pytest-benchmark `pedantic()`** required for large payloads (100KB) — standard mode runs too many iterations
 - **No CLI, no config files, no framework dependencies** — this is a library only
 - **No LLM prompt escaper** — vendor syntax moves too fast; pluggable design lets users build their own

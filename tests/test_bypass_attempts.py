@@ -207,10 +207,10 @@ class TestPathEscaperBypasses:
     """Try to escape the directory."""
 
     def test_backslash_traversal(self) -> None:
-        # Windows-style path traversal
-        # path_escaper splits on / not \ — backslashes pass through
-        # This is a known limitation on Windows paths
-        assert clean("..\\..\\etc\\passwd", escaper=path_escaper) is not None
+        # Windows-style path traversal — backslashes normalized to /
+        result = clean("..\\..\\etc\\passwd", escaper=path_escaper)
+        assert ".." not in result
+        assert result == "etc/passwd"
 
     def test_url_encoded_dotdot(self) -> None:
         # %2e%2e/ — URL encoding of ../
@@ -224,7 +224,8 @@ class TestPathEscaperBypasses:
 
     def test_dotdot_with_spaces(self) -> None:
         # ".. " is not ".." — the space makes it a different segment
-        assert clean(".. /.. /etc/passwd", escaper=path_escaper) is not None
+        result = clean(".. /.. /etc/passwd", escaper=path_escaper)
+        assert ".." not in result
 
     def test_null_in_path(self) -> None:
         # Null byte truncation attack on paths
@@ -248,17 +249,22 @@ class TestStageOrderExploits:
     """The pipeline runs stages in fixed order. Can we exploit that?"""
 
     def test_nfkc_creates_homoglyph_after_homoglyph_stage(self) -> None:
-        # NFKC runs BEFORE homoglyphs — so if NFKC produced a homoglyph,
-        # the homoglyph stage would catch it.
-        # But what if a character survives NFKC and STILL looks confusable?
-        # This is the map gap problem, not a stage order issue.
-        pass
+        # NFKC runs BEFORE homoglyphs — verify NFKC output is caught.
+        # Mathematical italic small a (U+1D44E) normalizes to 'a' via NFKC,
+        # which is already Latin — not a homoglyph. Verify clean output.
+        result = clean("\U0001d44edmin")
+        assert result == "admin"
 
     def test_homoglyph_replacement_creates_jinja_delimiter(self) -> None:
-        # Can we craft homoglyphs that, when replaced, form {{ ?
-        # Homoglyph map only maps to single ASCII chars, not to { or }
-        # So no — homoglyph replacement can't create new delimiters
-        pass
+        # Homoglyph map only maps to ASCII letters/digits/dashes/quotes,
+        # never to { } % # — so replacement can't create new delimiters.
+        # Verify by running all homoglyph map outputs through jinja2 escaper.
+        from navi_sanitize._homoglyphs import HOMOGLYPH_MAP
+
+        all_replacements = "".join(HOMOGLYPH_MAP.values())
+        assert "{{" not in all_replacements
+        assert "{%" not in all_replacements
+        assert "{#" not in all_replacements
 
     def test_invisible_strip_creates_delimiter(self) -> None:
         # { + (invisible) + { → {{ after stripping

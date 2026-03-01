@@ -58,7 +58,10 @@ HOMOGLYPH_MAP: dict[str, str] = {
     "\u03a7": "X",
     # Greek → Latin (lowercase)
     "\u03b1": "a",
+    "\u03b9": "i",  # iota ι
+    "\u03bd": "v",  # nu ν
     "\u03bf": "o",
+    "\u03c1": "p",  # rho ρ
     # Typographic
     "\u2212": "-",  # minus sign
     "\u2013": "-",  # en dash

@@ -10,6 +10,7 @@ def path_escaper(text: str) -> str:
     Strips ../ and ./ segments, leading /, and embedded .. within segments
     (which can appear when earlier pipeline stages concatenate fragments).
     """
+    text = text.replace("\\", "/")
     text = text.lstrip("/")
     parts = text.split("/")
     clean_parts: list[str] = []

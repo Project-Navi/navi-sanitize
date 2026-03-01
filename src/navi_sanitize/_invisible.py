@@ -14,6 +14,8 @@ ZERO_WIDTH_CHARS: set[str] = {
     "\u200b",  # zero-width space
     "\u200c",  # zero-width non-joiner
     "\u200d",  # zero-width joiner
+    "\u200e",  # left-to-right mark
+    "\u200f",  # right-to-left mark
     "\u2060",  # word joiner
     "\ufeff",  # BOM / zero-width no-break space
     "\u180e",  # Mongolian vowel separator
@@ -34,14 +36,17 @@ FORMAT_CHARS: set[str] = {
     "\ufffc",  # object replacement character
 }
 
-# --- Variation selectors (U+FE00-U+FE0F) ---
-# Invisible modifiers that change glyph presentation.
+# --- Variation selectors ---
+# BMP range (U+FE00-U+FE0F) = VS1-VS16.
+# Supplementary range (U+E0100-U+E01EF) = VS17-VS256.
+# Both are invisible modifiers that change glyph presentation.
 VARIATION_SELECTOR_RANGE = (0xFE00, 0xFE0F)
+VARIATION_SELECTOR_SUPPLEMENT_RANGE = (0xE0100, 0xE01EF)
 
-# --- Unicode Tag block (U+E0001-U+E007F) ---
-# Encodes invisible ASCII that tokenizers read but humans can't see.
-# Used in tag smuggling attacks against LLMs.
-TAG_BLOCK_RANGE = (0xE0001, 0xE007F)
+# --- Unicode Tag block (U+E0000-U+E007F) ---
+# U+E0000 is the deprecated LANGUAGE TAG; U+E0001-U+E007F encode invisible
+# ASCII that tokenizers read but humans can't see (tag smuggling attacks).
+TAG_BLOCK_RANGE = (0xE0000, 0xE007F)
 
 # --- Bidirectional override/isolate characters ---
 # Used to reorder displayed text, hiding malicious content.
@@ -78,6 +83,12 @@ _INVISIBLE_CHARS = (
     + chr(TAG_BLOCK_RANGE[0])
     + "-"
     + chr(TAG_BLOCK_RANGE[1])
+    + "]"
+    # Variation selectors supplement (range)
+    + "|["
+    + chr(VARIATION_SELECTOR_SUPPLEMENT_RANGE[0])
+    + "-"
+    + chr(VARIATION_SELECTOR_SUPPLEMENT_RANGE[1])
     + "]"
     # Bidi controls (individual chars)
     + "|["

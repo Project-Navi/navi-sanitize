@@ -24,11 +24,12 @@ logger = logging.getLogger("navi_sanitize")
 Escaper = Callable[[str], str]
 
 
-def _strip_null_bytes(s: str) -> tuple[str, bool]:
-    """Strip null bytes. Returns (cleaned, changed)."""
-    if "\x00" in s:
-        return s.replace("\x00", ""), True
-    return s, False
+def _strip_null_bytes(s: str) -> tuple[str, int]:
+    """Strip null bytes. Returns (cleaned, count_removed)."""
+    count = s.count("\x00")
+    if count:
+        return s.replace("\x00", ""), count
+    return s, 0
 
 
 def _strip_invisible(s: str) -> tuple[str, int]:
@@ -68,10 +69,13 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 
     Always returns output. Logs warnings when input is modified.
     """
+    if not isinstance(text, str):
+        raise TypeError(f"clean() requires str, got {type(text).__name__}")
+
     # Stage 1: Null bytes
-    text, had_nulls = _strip_null_bytes(text)
-    if had_nulls:
-        logger.warning("Removed null byte(s) from value")
+    text, null_count = _strip_null_bytes(text)
+    if null_count:
+        logger.warning("Removed %d null byte(s) from value", null_count)
 
     # Stage 2: Invisible characters
     text, invis_count = _strip_invisible(text)
@@ -91,6 +95,8 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     # Stage 5: Escaper
     if escaper is not None:
         text = escaper(text)
+        if not isinstance(text, str):
+            raise TypeError(f"Escaper must return str, got {type(text).__name__}")
 
     return text
 
@@ -107,8 +113,12 @@ def walk[T](data: T, *, escaper: Escaper | None = None) -> T:
 def _walk_inner(obj: object, *, escaper: Escaper | None = None) -> object:
     """Walk and sanitize in place on the deep-copied structure."""
     if isinstance(obj, dict):
+        new_dict: dict[object, object] = {}
         for k, v in obj.items():
-            obj[k] = _walk_inner(v, escaper=escaper)
+            clean_key = clean(k, escaper=escaper) if isinstance(k, str) else k
+            new_dict[clean_key] = _walk_inner(v, escaper=escaper)
+        obj.clear()
+        obj.update(new_dict)
         return obj
     if isinstance(obj, list):
         for i, item in enumerate(obj):

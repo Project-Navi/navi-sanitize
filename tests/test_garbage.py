@@ -124,13 +124,12 @@ class TestUnicodeEdgeCases:
         # U+10FFFF — max Unicode codepoint
         assert clean("a\U0010ffffb") == "a\U0010ffffb"
 
-    def test_surrogate_boundary(self) -> None:
-        # Characters just outside the tag block range
-        before_tag = chr(0xE0000)
+    def test_tag_block_boundary(self) -> None:
+        # U+E0000 is now IN the tag block range — should be stripped
+        # U+E0080 is just OUTSIDE — should pass through
         after_tag = chr(0xE0080)
-        result = clean("a" + before_tag + "b" + after_tag + "c")
-        # These are outside our strip range, should pass through
-        assert "a" in result and "b" in result and "c" in result
+        result = clean("a" + chr(0xE0000) + "b" + after_tag + "c")
+        assert result == "ab" + after_tag + "c"
 
     def test_fullwidth_digits(self) -> None:
         assert clean("\uff10\uff11\uff12\uff13") == "0123"

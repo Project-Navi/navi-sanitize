@@ -18,6 +18,21 @@ authors = [
 maintainers = [
     { name = "Nelson Spence" }
 ]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Text Processing :: Filters",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/Project-Navi/navi-sanitize"
+Issues = "https://github.com/Project-Navi/navi-sanitize/issues"
 
 [dependency-groups]
 dev = [
