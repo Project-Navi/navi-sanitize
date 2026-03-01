@@ -8,7 +8,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-Navi/navi-sanitize/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-Navi/navi-sanitize)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Input sanitization pipeline for untrusted text. Bytes in, clean bytes out.
+Deterministic input sanitization for untrusted text. Zero dependencies, zero false positives.
 
 ```python
 from navi_sanitize import clean
@@ -93,6 +93,38 @@ clean(user_input)
 
 An escaper is a function: `str -> str`. Write one in three lines.
 
+## Framework Integration
+
+```python
+# Pydantic — validate then sanitize
+from typing import Annotated
+from pydantic import BaseModel, AfterValidator
+from navi_sanitize import clean
+
+SafeStr = Annotated[str, AfterValidator(clean)]
+
+class UserInput(BaseModel):
+    name: SafeStr
+    bio: SafeStr
+
+# FastAPI — sanitize at the edge
+from fastapi import Depends, Query
+from navi_sanitize import clean
+
+def safe_query(q: str = Query()) -> str:
+    return clean(q)
+
+@app.get("/search")
+def search(q: str = Depends(safe_query)):
+    return {"results": find(q)}
+
+# Jinja2 — sanitize before rendering
+from navi_sanitize import clean, jinja2_escaper
+
+safe_context = {k: clean(v, escaper=jinja2_escaper) for k, v in user_data.items()}
+template.render(**safe_context)
+```
+
 ## Install
 
 ```
@@ -134,6 +166,17 @@ if is_mixed_script(raw) or is_mixed_script(peeled):
 - **`is_mixed_script(text)`** — `True` when 2+ scripts detected
 
 Script detection can be applied pre-clean too — most useful on raw input for phishing detection.
+
+## What This Doesn't Do
+
+navi-sanitize operates at the character level. It does **not** cover:
+
+- **HTML/XSS** — use your template engine's auto-escaping (`markupsafe.escape()`, `nh3.clean()`)
+- **SQL injection** — use parameterized queries
+- **Schema validation** — use pydantic, cerberus, or similar (they compose with `clean()`)
+- **LLM prompt injection** — vendor syntax is a moving target; write a custom escaper
+
+These are different problems with mature, purpose-built solutions. navi-sanitize handles what they don't: the invisible, character-level content that slips past them.
 
 ## Warnings
 
