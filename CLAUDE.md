@@ -61,17 +61,18 @@ Uses `src/` layout (`src/navi_sanitize/`). Internal modules prefixed with `_`.
 
 ### Public API (`__init__.py`)
 
-Three exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=None) -> T`, and escapers (`jinja2_escaper`, `path_escaper`). `Escaper = Callable[[str], str]`.
+Eight exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=None) -> T`, escapers (`jinja2_escaper`, `path_escaper`), `Escaper = Callable[[str], str]`, and opt-in utilities (`decode_evasion`, `detect_scripts`, `is_mixed_script`).
 
 ### Pipeline (`_pipeline.py`)
 
-Five stages in strict order — reordering breaks security:
+Six stages in strict order — reordering breaks security:
 
 1. **Null byte removal** — strip `\x00` (prevents C-extension truncation)
 2. **Invisible character stripping** — single compiled regex covering zero-width chars, format/control chars, variation selectors, Unicode Tag block (`U+E0001`-`U+E007F`), and bidi overrides
 3. **NFKC normalization** — collapses fullwidth ASCII and compatibility forms
 4. **Homoglyph replacement** — character-by-character scan against 51-pair map in `_homoglyphs.py`
-5. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
+5. **Re-NFKC** (conditional) — re-normalize after homoglyph replacement to ensure idempotency
+6. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
 
 Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effects — the orchestrator logs.
 
