@@ -41,11 +41,19 @@ BIDI_CONTROL_CHARS: set[str] = {
 # Single compiled regex for all invisible characters
 _INVISIBLE_CHARS = (
     # Zero-width (individual chars)
-    "[" + "".join(ZERO_WIDTH_CHARS) + "]"
+    "["
+    + "".join(ZERO_WIDTH_CHARS)
+    + "]"
     # Tag block (range)
-    + "|[" + chr(TAG_BLOCK_RANGE[0]) + "-" + chr(TAG_BLOCK_RANGE[1]) + "]"
+    + "|["
+    + chr(TAG_BLOCK_RANGE[0])
+    + "-"
+    + chr(TAG_BLOCK_RANGE[1])
+    + "]"
     # Bidi controls (individual chars)
-    + "|[" + "".join(BIDI_CONTROL_CHARS) + "]"
+    + "|["
+    + "".join(BIDI_CONTROL_CHARS)
+    + "]"
 )
 
 INVISIBLE_RE: re.Pattern[str] = re.compile(_INVISIBLE_CHARS)

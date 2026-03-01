@@ -1,4 +1,4 @@
-# ruff: noqa: RUF003
+# ruff: noqa: RUF001
 # tests/test_adversarial.py
 """Adversarial tests ported from navi-bootstrap.
 
@@ -12,7 +12,6 @@ import logging
 import pytest
 
 from navi_sanitize import clean, jinja2_escaper, walk
-
 
 # --- Homoglyph attacks ---
 

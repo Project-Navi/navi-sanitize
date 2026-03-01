@@ -78,6 +78,20 @@ clean("pаypal.com")
 # Returns: "paypal.com"
 ```
 
+## Performance
+
+Measured on Python 3.12, single thread. `clean()` is the per-string cost; `walk()` includes `deepcopy`.
+
+| Scenario | Mean | Ops/sec |
+|----------|------|---------|
+| `clean()` — short, clean text (no-op) | 2.8 us | 358K |
+| `clean()` — short, hostile (all stages fire) | 67 us | 15K |
+| `clean()` — 13KB clean text | 810 us | 1.2K |
+| `clean()` — 10KB hostile text | 449 us | 2.2K |
+| `clean()` — 100KB hostile payload | 5.7 ms | 176 |
+| `walk()` — 100-item nested dict, clean | 537 us | 1.9K |
+| `walk()` — 100-item nested dict, hostile | 6.9 ms | 144 |
+
 ## License
 
 MIT

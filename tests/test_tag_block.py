@@ -1,3 +1,4 @@
+# ruff: noqa: RUF003
 # tests/test_tag_block.py
 """Tests for Unicode Tag block smuggling and bidi override attacks.
 
@@ -98,9 +99,7 @@ class TestMultiVectorTagBidi:
         result = clean("n\u0430vi\u202e" + tag + "end")
         assert result == "naviend"
 
-    def test_all_invisible_categories_at_once(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_all_invisible_categories_at_once(self, caplog: pytest.LogCaptureFixture) -> None:
         zw = "\u200b"  # zero-width
         tag = _encode_tag_block("x")  # 1 tag char
         bidi = "\u202e"  # RLO

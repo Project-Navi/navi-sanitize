@@ -6,11 +6,9 @@ Run: uv run pytest tests/test_benchmark.py --benchmark-only
 
 from __future__ import annotations
 
-import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 
 from navi_sanitize import clean, jinja2_escaper, walk
-
 
 # --- Test data ---
 
@@ -24,8 +22,7 @@ HOSTILE_100K = HOSTILE_SHORT * 2500  # ~100KB
 
 NESTED_CLEAN = {
     "users": [
-        {"name": f"user_{i}", "email": f"user_{i}@example.com", "active": True}
-        for i in range(100)
+        {"name": f"user_{i}", "email": f"user_{i}@example.com", "active": True} for i in range(100)
     ]
 }
 
