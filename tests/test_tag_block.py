@@ -15,7 +15,7 @@ from navi_sanitize import clean, jinja2_escaper
 
 
 def _encode_tag_block(text: str) -> str:
-    """Encode ASCII text as Unicode Tag block characters (U+E0001-U+E007F)."""
+    """Encode ASCII text as Unicode Tag block characters (U+E0000-U+E007F)."""
     return "".join(chr(0xE0000 + ord(c)) for c in text)
 
 

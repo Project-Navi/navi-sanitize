@@ -44,7 +44,7 @@ navi-sanitize is the only library that combines invisible character stripping, h
 |---|---|---|---|---|---|
 | **Purpose** | Security sanitization | ASCII transliteration | Homoglyph detection | Encoding repair | HTML escaping |
 | **Invisible chars** | Strips 411 (bidi, tag block, ZW, VS) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
-| **Homoglyphs** | Replaces 51 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
+| **Homoglyphs** | Replaces 54 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
 | **NFKC** | Yes | No | No | NFC (NFKC optional) | No |
 | **Null bytes** | Yes | No | No | No | No |
 | **Preserves Unicode** | Yes (CJK, Arabic, emoji intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
@@ -53,7 +53,7 @@ navi-sanitize is the only library that combines invisible character stripping, h
 
 **Key differences:**
 
-- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 51 highest-risk lookalikes and leaves legitimate Unicode intact.
+- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 54 highest-risk lookalikes and leaves legitimate Unicode intact.
 - **confusable_homoglyphs** uses the full Unicode Consortium confusables dataset (thousands of pairs) but only *detects* — you'd need to write your own replacement layer. It's also archived.
 - **ftfy** is complementary, not competing. It fixes encoding corruption and explicitly *preserves* bidi overrides and zero-width characters that navi-sanitize strips. Different threat model.
 - **MarkupSafe / nh3** handle HTML structure; navi-sanitize handles the character-level content *inside* that structure. They compose naturally.
