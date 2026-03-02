@@ -231,7 +231,7 @@ Every string passed to \texttt{clean()} flows through six stages in strict order
   \node[note, below=2pt of s5] {conditional};
   \node[note, below=2pt of s6] {pluggable};
 \end{tikzpicture}
-\caption{The six-stage sanitization pipeline. Stages 1--5 are universal; Stage~6 is a caller-supplied escaper. Stage~5 runs only when Stage~4 replaces homoglyphs.}
+\caption{The six-stage sanitization pipeline. Stages 1--4 are universal; Stage~5 is conditional; Stage~6 is a caller-supplied escaper. Stage~5 runs only when Stage~4 replaces homoglyphs.}
 \label{fig:pipeline}
 \end{figure}
 
