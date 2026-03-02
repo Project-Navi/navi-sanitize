@@ -1,0 +1,11 @@
+# Default owners for all files
+* @Fieldnote-Echo
+
+# Security-critical paths
+src/navi_sanitize/_pipeline.py @Fieldnote-Echo
+src/navi_sanitize/_homoglyphs.py @Fieldnote-Echo
+src/navi_sanitize/_invisible.py @Fieldnote-Echo
+src/navi_sanitize/escapers/ @Fieldnote-Echo
+
+# CI and workflows
+.github/ @Fieldnote-Echo
