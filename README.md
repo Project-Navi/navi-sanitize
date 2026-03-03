@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml)
 [![Fuzz](https://github.com/Project-Navi/navi-sanitize/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/fuzz.yml)
-[![codecov](https://codecov.io/gh/Project-Navi/navi-sanitize/branch/main/graph/badge.svg)](https://codecov.io/gh/Project-Navi/navi-sanitize)
+[![codecov](https://codecov.io/github/Project-Navi/navi-sanitize/graph/badge.svg?token=9Vr26NV2Fn)](https://codecov.io/github/Project-Navi/navi-sanitize)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-green.svg)](https://www.python.org/)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-Navi/navi-sanitize/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-Navi/navi-sanitize)
