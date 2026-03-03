@@ -1,11 +1,13 @@
 # navi-sanitize
 
-[![CI](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml)
-[![Fuzz](https://github.com/Project-Navi/navi-sanitize/actions/workflows/fuzz.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/fuzz.yml)
-[![codecov](https://codecov.io/github/Project-Navi/navi-sanitize/graph/badge.svg?token=9Vr26NV2Fn)](https://codecov.io/github/Project-Navi/navi-sanitize)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-green.svg)](https://www.python.org/)
+[![Tests](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Project-Navi/navi-sanitize/actions/workflows/codeql.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/codeql.yml)
+[![codecov](https://codecov.io/gh/Project-Navi/navi-sanitize/graph/badge.svg?token=9Vr26NV2Fn)](https://codecov.io/gh/Project-Navi/navi-sanitize)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-Navi/navi-sanitize/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-Navi/navi-sanitize)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
+[![PyPI](https://img.shields.io/pypi/v/navi-sanitize)](https://pypi.org/project/navi-sanitize/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 Deterministic input sanitization for untrusted text. Zero dependencies, zero false positives.
