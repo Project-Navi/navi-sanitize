@@ -38,7 +38,56 @@ jobs:
           assert walk({'k': 'v'}) == {'k': 'v'}
           print('Smoke test passed')
           "
+      - name: Upload dist
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dist
+          path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
           print-hash: true
+
+  release-assets:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        with:
+          name: dist
+          path: dist/
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+        with:
+          path: dist/
+          artifact-name: navi-sanitize.cdx.json
+          output-file: navi-sanitize.cdx.json
+          format: cyclonedx-json
+          upload-artifact: false
+          upload-release-assets: true
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+        with:
+          path: dist/
+          artifact-name: navi-sanitize.spdx.json
+          output-file: navi-sanitize.spdx.json
+          format: spdx-json
+          upload-artifact: false
+          upload-release-assets: true
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: |
+            dist/*
+            navi-sanitize.cdx.json
+            navi-sanitize.spdx.json
+      - name: Upload dist to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release upload "$TAG_NAME" dist/* --clobber
