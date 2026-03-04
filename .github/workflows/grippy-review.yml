@@ -1,0 +1,46 @@
+name: Grippy Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: grippy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Grippy Code Review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: step-security/harden-runner@a90bcbc6539c36a85cdfeb73f7e2f433735f215b  # v2.15.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Grippy
+        run: pip install "grippy-code-review[persistence] @ git+https://github.com/Project-Navi/grippy-code-review.git@19f078e42e7b8bee38a990ccf03236ea44ae2d71"
+
+      - name: Run review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GRIPPY_TRANSPORT: openai
+          GRIPPY_MODEL_ID: gpt-4.1
+          GRIPPY_EMBEDDING_MODEL: text-embedding-3-large
+          GRIPPY_DATA_DIR: ./grippy-data
+          GRIPPY_TIMEOUT: 300
+        run: python -I -m grippy
