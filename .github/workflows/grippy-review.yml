@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install Grippy
-        run: pip install "grippy-code-review[persistence]"
+        run: pip install "grippy-code-review[persistence] @ git+https://github.com/Project-Navi/grippy-code-review.git"
 
       - name: Run review
         env:
