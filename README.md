@@ -12,6 +12,8 @@
 
 Deterministic input sanitization for untrusted text. Zero dependencies. Legitimate Unicode preserved by design.
 
+**[Documentation](https://github.com/Project-Navi/navi-sanitize/wiki)** · [Getting Started](https://github.com/Project-Navi/navi-sanitize/wiki/Getting-Started) · [API Reference](https://github.com/Project-Navi/navi-sanitize/wiki/API-Reference) · [Threat Model](https://github.com/Project-Navi/navi-sanitize/wiki/Threat-Model)
+
 ```python
 from navi_sanitize import clean
 
