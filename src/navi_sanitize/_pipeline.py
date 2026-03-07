@@ -48,14 +48,24 @@ def _normalize_nfkc(s: str) -> tuple[str, bool]:
 
 
 def _replace_homoglyphs(s: str) -> tuple[str, int]:
-    """Replace homoglyphs with ASCII equivalents. Returns (cleaned, count)."""
+    """Replace homoglyphs with ASCII equivalents. Returns (cleaned, count).
+
+    Decomposes to NFD first so that combining marks cannot hide
+    mapped base characters (e.g., Cyrillic U+0430 + breve composes
+    to U+04D1 in NFKC, but NFD exposes the base char for replacement).
+    """
+    decomposed = unicodedata.normalize("NFD", s)
     count = 0
-    chars = list(s)
+    chars = list(decomposed)
     for i, ch in enumerate(chars):
         if ch in HOMOGLYPH_MAP:
             chars[i] = HOMOGLYPH_MAP[ch]
             count += 1
-    return "".join(chars), count
+    result = "".join(chars)
+    # Recompose so the caller always gets NFC-stable text, even when
+    # no replacements were made (NFD would otherwise leak out).
+    result = unicodedata.normalize("NFC", result)
+    return result, count
 
 
 def clean(text: str, *, escaper: Escaper | None = None) -> str:
