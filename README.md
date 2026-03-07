@@ -8,7 +8,7 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-Navi/navi-sanitize/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-Navi/navi-sanitize)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Deterministic input sanitization for untrusted text. Zero dependencies, zero false positives.
+Deterministic input sanitization for untrusted text. Zero dependencies. Legitimate Unicode preserved by design.
 
 ```python
 from navi_sanitize import clean
@@ -43,8 +43,8 @@ navi-sanitize is the only library that combines invisible character stripping, h
 | | navi-sanitize | Unidecode / anyascii | confusable_homoglyphs | ftfy | MarkupSafe / nh3 |
 |---|---|---|---|---|---|
 | **Purpose** | Security sanitization | ASCII transliteration | Homoglyph detection | Encoding repair | HTML escaping |
-| **Invisible chars** | Strips 411 (bidi, tag block, ZW, VS) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
-| **Homoglyphs** | Replaces 54 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
+| **Invisible chars** | Strips 492 (bidi, tag block, ZW, VS, C0/C1) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
+| **Homoglyphs** | Replaces 66 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
 | **NFKC** | Yes | No | No | NFC (NFKC optional) | No |
 | **Null bytes** | Yes | No | No | No | No |
 | **Preserves Unicode** | Yes (CJK, Arabic, emoji intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
@@ -53,7 +53,7 @@ navi-sanitize is the only library that combines invisible character stripping, h
 
 **Key differences:**
 
-- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 54 highest-risk lookalikes and leaves legitimate Unicode intact.
+- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 66 highest-risk lookalikes and leaves legitimate Unicode intact.
 - **confusable_homoglyphs** uses the full Unicode Consortium confusables dataset (thousands of pairs) but only *detects* — you'd need to write your own replacement layer. It's also archived.
 - **ftfy** is complementary, not competing. It fixes encoding corruption and explicitly *preserves* bidi overrides and zero-width characters that navi-sanitize strips. Different threat model.
 - **MarkupSafe / nh3** handle HTML structure; navi-sanitize handles the character-level content *inside* that structure. They compose naturally.

@@ -97,7 +97,7 @@
   {\normalsize Nelson Spence}\\[0.2em]
   {\small\color{NaviGray} Project Navi LLC \quad\textbullet\quad Austin, Texas}\\[0.2em]
   {\small\color{NaviGray} \url{https://github.com/Project-Navi/navi-sanitize}}\\[1.5em]
-  {\small March 2026 \quad\textbullet\quad v1.0 \quad\textbullet\quad \texttt{0a5b50e}}
+  {\small March 2026 \quad\textbullet\quad v0.1.1 \quad\textbullet\quad \texttt{767cc3c}}
 \end{center}
 
 \vspace{0.5em}
@@ -111,7 +111,7 @@
 
 \section*{Abstract}
 
-Untrusted text entering AI agent pipelines, template engines, and identity systems carries invisible attacks: homoglyph substitution that bypasses keyword filters, zero-width characters that split delimiters, Unicode Tag block characters that encode instructions tokenizers read but humans cannot see, and bidirectional overrides that reorder displayed text. These attacks operate below the layer where existing defenses---HTML escaping, schema validation, probabilistic detection---are designed to function. \textbf{navi-sanitize} is a zero-dependency Python library that removes these vectors deterministically at the input boundary. A six-stage pipeline removes null bytes, strips 411 invisible characters, applies NFKC normalization, replaces 54 targeted homoglyphs with Latin equivalents, re-normalizes to guarantee idempotency, and runs a pluggable context-specific escaper---producing identical output for identical input, with zero false positives on legitimate Unicode text. Clean-path latency is 2.8\,\textmu s per string.
+Untrusted text entering AI agent pipelines, template engines, and identity systems carries invisible attacks: homoglyph substitution that bypasses keyword filters, zero-width characters that split delimiters, Unicode Tag block characters that encode instructions tokenizers read but humans cannot see, and bidirectional overrides that reorder displayed text. These attacks operate below the layer where existing defenses---HTML escaping, schema validation, probabilistic detection---are designed to function. \textbf{navi-sanitize} is a zero-dependency Python library that removes these vectors deterministically at the input boundary. A six-stage pipeline removes null bytes, strips 492 invisible characters, applies NFKC normalization, replaces 66 targeted homoglyphs with Latin equivalents, re-normalizes to guarantee idempotency, and runs a pluggable context-specific escaper---producing identical output for identical input, with no false positives observed on legitimate Unicode text including CJK, Arabic, Hebrew, and emoji. Clean-path latency is 2.8\,\textmu s per string.
 
 % ============================================================================
 % 1. THE PROBLEM
@@ -169,15 +169,15 @@ Two design choices define navi-sanitize and separate it from every other tool in
 
 \subsection{Transform, don't detect}
 
-\texttt{clean()} is a pure function. Same input, same output, every time. No ML models, no confidence scores, no thresholds to tune. The pipeline either modifies a character or it doesn't, and when it does, it logs a structured warning with a count. This makes the library auditable, testable, and predictable in production---properties that matter when the sanitization layer sits between untrusted input and an autonomous agent.
+\texttt{clean()} is a deterministic function. Same input, same output, every time. No ML models, no confidence scores, no thresholds to tune. The pipeline either modifies a character or it doesn't, and when it does, it logs a structured warning with a count (the only side effect). This makes the library auditable, testable, and predictable in production---properties that matter when the sanitization layer sits between untrusted input and an autonomous agent.
 
 The only library that previously addressed homoglyph confusion---\texttt{confusable\_homoglyphs}---takes the opposite approach: a detection API that tells the caller \emph{which} characters are confusable and from \emph{which} scripts. The caller then decides what to do. This is valuable for analysis and auditing. It is not useful at 3\,AM when an agent is processing untrusted input in production. navi-sanitize takes the opinionated position: confusable characters are replaced, invisible characters are stripped, and the pipeline always produces clean output. The application never handles ``this input might be dangerous.'' It is already fixed.
 
 \subsection{Curation over coverage}
 
-The Unicode Consortium maintains a \texttt{Confusables.txt} dataset with thousands of visually similar character pairs across dozens of scripts. navi-sanitize does not use it. Instead, the library maintains a curated map of 54 homoglyph pairs---the Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes that are actively weaponized in phishing, filter bypass, and injection attacks---plus 411 invisible characters across six categories (zero-width, format/control, variation selectors, Tag block, variation selector supplement, and bidirectional controls).
+The Unicode Consortium maintains a \texttt{Confusables.txt} dataset with thousands of visually similar character pairs across dozens of scripts. navi-sanitize does not use it. Instead, the library maintains a curated map of 66 homoglyph pairs---the Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes that are actively weaponized in phishing, filter bypass, and injection attacks---plus 492 invisible characters across eight categories (zero-width, format/control, variation selectors, variation selector supplement, Mongolian Free Variation Selectors, Unicode Tag block, bidirectional controls, and C0/C1 controls).
 
-The curation is the feature. Every entry in the map is auditable by a human reading the source. Every entry has a documented security rationale. The map produces zero false positives on legitimate Unicode text---including CJK, Arabic, Hebrew, and emoji---and covers the attack surface that matters in practice. Exhaustive coverage of all Unicode confusables would flag thousands of benign character pairs and require per-deployment tuning---exactly the operational burden this library exists to eliminate.
+The curation is the feature. Every entry in the map is auditable by a human reading the source. Every entry has a documented security rationale. No false positives have been observed on legitimate Unicode text---including CJK, Arabic, Hebrew, and emoji---across 357 test cases and 100K fuzzing iterations, and the map covers the attack surface that matters in practice. Exhaustive coverage of all Unicode confusables would flag thousands of benign character pairs and require per-deployment tuning---exactly the operational burden this library exists to eliminate.
 
 % ============================================================================
 % 4. PIPELINE DESIGN
@@ -185,7 +185,7 @@ The curation is the feature. Every entry in the map is auditable by a human read
 
 \section{Pipeline Design}
 
-Every string passed to \texttt{clean()} flows through six stages in strict order (Figure~\ref{fig:pipeline}). Each stage is a pure function returning a cleaned string and a change indicator. The orchestrator logs warnings; stages have no side effects.
+Every string passed to \texttt{clean()} flows through six stages in strict order (Figure~\ref{fig:pipeline}). Each stage is a pure function returning a tuple of the cleaned string and a change indicator (a count for stages that strip or replace, a boolean for normalization). The orchestrator logs warnings; stages have no side effects.
 
 \begin{figure}[h]
 \centering
@@ -243,9 +243,9 @@ Every string passed to \texttt{clean()} flows through six stages in strict order
 \textbf{Stage} & \textbf{Operation} & \textbf{What It Does} \\
 \midrule
 1 & Null byte strip & Remove \texttt{\textbackslash x00} (prevents C-extension truncation) \\
-2 & Invisible strip & Remove 411 chars across six categories including zero-width, format/control, tag block, bidi, and variation selectors \\
+2 & Invisible strip & Remove 492 chars across eight categories including zero-width, format/control, tag block, bidi, variation selectors, Mongolian FVS, and C0/C1 controls \\
 3 & NFKC normalize & Collapse fullwidth ASCII, ligatures, math symbols to standard forms \\
-4 & Homoglyph replace & Swap 54 Cyrillic/Greek/Armenian/Cherokee/typographic lookalikes to Latin \\
+4 & Homoglyph replace & NFD decompose, then swap 66 Cyrillic/Greek/Armenian/Cherokee/typographic lookalikes to Latin \\
 5 & Re-NFKC & Re-normalize if Stage~4 changed anything (ensures idempotency) \\
 6 & Escaper & Caller-supplied \texttt{str~$\rightarrow$~str} function for context-specific escaping \\
 \bottomrule
@@ -304,18 +304,18 @@ clean(user_input, escaper=my_prompt_escaper)
 
 The pipeline's correctness rests on a single invariant: \textbf{idempotency}. For all inputs and all escaper configurations, \texttt{clean(clean(x))} must equal \texttt{clean(x)}. This is verified across every hostile input in the test suite and enforced as a fuzz invariant via Atheris.
 
-The test suite comprises 300+ cases across six categories:
+The test suite comprises 357 cases across six categories:
 
 \begin{itemize}
 \item \textbf{Unit tests} for each stage in isolation and \texttt{clean()}/\texttt{walk()} end-to-end.
 \item \textbf{Adversarial tests} ported from the production predecessor (navi-bootstrap), with a \textbf{test oracle}: for every shared input, \texttt{clean(text, escaper=jinja2\_escaper)} must produce identical output to the predecessor's \texttt{\_sanitize\_string(text, escape\_jinja=True)}.
 \item \textbf{Bypass attempts} written from the attacker's perspective---a passing test means the attack was blocked. Covers homoglyph map gaps, invisible character gaps, escaper bypasses, and stage-order exploits.
-\item \textbf{Audit remediation} regression tests for 18 bypass vectors found during penetration testing, including supplementary variation selectors (VS17--VS256), the U+E0000 language tag, Greek lowercase homoglyphs, and path escaper backslash normalization.
+\item \textbf{Audit remediation} regression tests covering 14 audit findings (44 test methods) from penetration testing, including supplementary variation selectors (VS17--VS256), the U+E0000 language tag, Greek lowercase homoglyphs, and path escaper backslash normalization.
 \item \textbf{Garbage tests} for size extremes (1\,MB strings, 100-level nesting, 10K-key dicts), Unicode edge cases (max codepoint, combining characters, CJK/Arabic/emoji passthrough), and escaper abuse.
 \item \textbf{Fuzz harness} using Atheris, enforcing four invariants on the universal pipeline (without escaper): never raises on valid input, always returns \texttt{str}, output contains no null bytes or invisible characters, and idempotent. (When an escaper is active, the harness verifies the first two invariants; the escaper may legitimately re-introduce characters the pipeline would otherwise strip.)
 \end{itemize}
 
-CI runs Semgrep SAST, CodeQL analysis (Python + Actions), pip-audit dependency scanning, and OpenSSF Scorecard on every push. All GitHub Actions are SHA-pinned.
+CI runs Semgrep SAST, CodeQL analysis (Python + Actions), pip-audit dependency scanning, and OpenSSF Scorecard on every push and pull request, with CodeQL and Scorecard also running on weekly schedules. All GitHub Actions are SHA-pinned.
 
 % ============================================================================
 % 6. COMPARISON
@@ -325,7 +325,7 @@ CI runs Semgrep SAST, CodeQL analysis (Python + Actions), pip-audit dependency s
 
 The relevant comparison is not feature-by-feature---it is threat-model-by-threat-model.
 
-\textbf{Unidecode and anyascii} transliterate \emph{all} Unicode to ASCII. They convert Chinese characters to pinyin, Korean to romanization, and Arabic to Latin approximations. This solves the homoglyph problem by destroying all non-Latin content. For applications that process multilingual text---which is most AI agent deployments---this is unacceptable. navi-sanitize replaces 54 targeted lookalikes and leaves legitimate Unicode intact.
+\textbf{Unidecode and anyascii} transliterate \emph{all} Unicode to ASCII. They convert Chinese characters to pinyin, Korean to romanization, and Arabic to Latin approximations. This solves the homoglyph problem by destroying all non-Latin content. For applications that process multilingual text---which is most AI agent deployments---this is unacceptable. navi-sanitize replaces 66 targeted lookalikes and leaves legitimate Unicode intact.
 
 \textbf{confusable\_homoglyphs} uses the Unicode Consortium's full confusables dataset and provides a detection API: it returns which characters are confusable and from which scripts. It does not replace or remove anything. The library is also archived upstream. navi-sanitize's curated map trades coverage for precision and ships the replacement, not just the signal.
 
@@ -376,7 +376,7 @@ These are design choices, not gaps.
 
 \textbf{Bidi control stripping breaks legitimate RTL rendering.} Stripping U+202A--U+202E and U+2066--U+2069 affects Arabic and Hebrew text that uses explicit directional controls for mixed-direction layout. navi-sanitize prioritizes security over RTL display fidelity. Applications processing known-legitimate RTL text should apply the pipeline selectively.
 
-\textbf{The homoglyph map is intentionally not exhaustive.} The Unicode confusables dataset contains thousands of pairs. navi-sanitize's 54-pair map covers the highest-risk Latin lookalikes. Characters from scripts not in the map (e.g., Georgian, Tibetan) pass through unchanged. This is a deliberate trade-off: zero false positives on legitimate Unicode text at the cost of incomplete coverage of rare confusables.
+\textbf{The homoglyph map is intentionally not exhaustive.} The Unicode confusables dataset contains thousands of pairs. navi-sanitize's 66-pair map covers the highest-risk Latin lookalikes. Characters from scripts not in the map (e.g., Georgian, Tibetan) pass through unchanged. This is a deliberate trade-off: no false positives observed on legitimate Unicode text at the cost of incomplete coverage of rare confusables.
 
 \textbf{NFKC normalization is lossy.} Compatibility decomposition changes some characters irreversibly: superscripts become regular digits, ligatures expand, circled numbers lose their circles. This is correct for security sanitization but may not be appropriate for all text processing contexts. Applications that need to preserve these forms should not use navi-sanitize on that data.
 
@@ -388,7 +388,7 @@ These are design choices, not gaps.
 
 Every defense in the stack---HTML escaping, schema validation, keyword filtering, ML-based guardrails---assumes the characters are what they appear to be. navi-sanitize makes that assumption true.
 
-One function call at the input boundary. Deterministic. Microseconds. No false positives. What your application receives is what is actually there.
+One function call at the input boundary. Deterministic. Microseconds. Legitimate Unicode preserved by design. What your application receives is what is actually there.
 
 \begin{lstlisting}[language={}]
 pip install navi-sanitize

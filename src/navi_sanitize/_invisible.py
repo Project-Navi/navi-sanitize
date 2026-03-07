@@ -3,7 +3,8 @@
 
 Data module — contains no logic, only character definitions.
 Categories: zero-width, format/control, variation selectors, variation selector
-supplement, Unicode Tag block, bidirectional controls.
+supplement, Mongolian Free Variation Selectors, Unicode Tag block, bidirectional
+controls, C0 controls, C1 controls.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-navi-sanitize is a standalone, zero-dependency Python library extracted from navi-bootstrap. It provides deterministic input sanitization for untrusted text — no ML, no false positives. Python 3.12+, stdlib only.
+navi-sanitize is a standalone, zero-dependency Python library extracted from navi-bootstrap. It provides deterministic input sanitization for untrusted text — no ML, legitimate Unicode preserved by design. Python 3.12+, stdlib only.
 
 ## Commands
 
@@ -70,7 +70,7 @@ Six stages in strict order — reordering breaks security:
 1. **Null byte removal** — strip `\x00` (prevents C-extension truncation)
 2. **Invisible character stripping** — single compiled regex covering zero-width chars, format/control chars, variation selectors, Unicode Tag block (`U+E0000`-`U+E007F`), and bidi overrides
 3. **NFKC normalization** — collapses fullwidth ASCII and compatibility forms
-4. **Homoglyph replacement** — character-by-character scan against 54-pair map in `_homoglyphs.py`
+4. **Homoglyph replacement** — NFD decomposition then character-by-character scan against 66-pair map in `_homoglyphs.py`
 5. **Re-NFKC** (conditional) — re-normalize after homoglyph replacement to ensure idempotency
 6. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
 
@@ -78,8 +78,8 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 
 ### Data files
 
-- `_homoglyphs.py` — 54 pairs: Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes
-- `_invisible.py` — zero-width, format/control (soft hyphen, thin/hair space, line/paragraph separators, etc.), variation selectors, Tag block, and bidi character sets
+- `_homoglyphs.py` — 66 pairs: Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes
+- `_invisible.py` — zero-width, format/control (soft hyphen, thin/hair space, line/paragraph separators, etc.), variation selectors, variation selector supplement, Mongolian FVS, Unicode Tag block, bidirectional controls, C0 controls, and C1 controls
 
 ### Escapers (`escapers/`)
 
