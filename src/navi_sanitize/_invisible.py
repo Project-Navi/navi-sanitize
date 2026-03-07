@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Invisible character sets for stripping from untrusted text.
 
-Data module — contains no logic, only character definitions.
+Data module — character definitions and compiled regex.
 Categories: zero-width, format/control, variation selectors, variation selector
 supplement, Mongolian Free Variation Selectors, Unicode Tag block, bidirectional
 controls, C0 controls, C1 controls.
@@ -63,7 +63,8 @@ VARIATION_SELECTOR_RANGE = (0xFE00, 0xFE0F)
 VARIATION_SELECTOR_SUPPLEMENT_RANGE = (0xE0100, 0xE01EF)
 
 # --- Mongolian Free Variation Selectors ---
-# Functionally identical to VS1-VS16. U+180B-U+180D, U+180F (U+180E already in ZERO_WIDTH).
+# Analogous to VS1-VS16 (script-specific, not general-purpose).
+# U+180B-U+180D, U+180F (U+180E already in ZERO_WIDTH).
 MONGOLIAN_FVS_CHARS: set[str] = {
     "\u180b",  # Mongolian free variation selector one
     "\u180c",  # Mongolian free variation selector two
@@ -72,8 +73,8 @@ MONGOLIAN_FVS_CHARS: set[str] = {
 }
 
 # --- Unicode Tag block (U+E0000-U+E007F) ---
-# U+E0000 is the deprecated LANGUAGE TAG; U+E0001-U+E007F encode invisible
-# ASCII that tokenizers read but humans can't see (tag smuggling attacks).
+# U+E0000 is unassigned; U+E0001 is the deprecated LANGUAGE TAG.
+# U+E0020-U+E007E encode invisible ASCII (tag smuggling attacks).
 TAG_BLOCK_RANGE = (0xE0000, 0xE007F)
 
 # --- C0 control characters (U+0001-U+001F) ---

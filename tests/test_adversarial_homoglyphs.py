@@ -64,7 +64,7 @@ class TestNFKCCompositionBypass:
 
 
 class TestGreekLowercaseGaps:
-    """Greek lowercase chars missing from the original 54-pair map."""
+    """Greek lowercase homoglyphs added to the 66-pair map in 0.2.0."""
 
     def test_greek_mu(self) -> None:
         assert clean("\u03bcser") == "user"
@@ -86,7 +86,7 @@ class TestGreekLowercaseGaps:
 
 
 class TestCyrillicExtendedGaps:
-    """Cyrillic chars with high visual similarity not in original map."""
+    """Cyrillic Extended homoglyphs added to the 66-pair map in 0.2.0."""
 
     def test_cyrillic_palochka_upper(self) -> None:
         """U+04C0 — indistinguishable from I/l."""

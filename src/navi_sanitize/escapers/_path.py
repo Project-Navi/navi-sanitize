@@ -7,8 +7,9 @@ from __future__ import annotations
 def path_escaper(text: str) -> str:
     """Remove path traversal sequences from a string.
 
-    Strips ../ and ./ segments, leading /, and embedded .. within segments
-    (which can appear when earlier pipeline stages concatenate fragments).
+    Normalizes backslashes to forward slashes, then strips ../ and ./ segments,
+    leading /, and embedded .. within segments (which can appear when earlier
+    pipeline stages concatenate fragments).
     """
     text = text.replace("\\", "/")
     text = text.lstrip("/")

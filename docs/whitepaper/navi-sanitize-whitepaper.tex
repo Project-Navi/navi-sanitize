@@ -175,9 +175,9 @@ The only library that previously addressed homoglyph confusion---\texttt{confusa
 
 \subsection{Curation over coverage}
 
-The Unicode Consortium maintains a \texttt{Confusables.txt} dataset with thousands of visually similar character pairs across dozens of scripts. navi-sanitize does not use it. Instead, the library maintains a curated map of 66 homoglyph pairs---the Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes that are actively weaponized in phishing, filter bypass, and injection attacks---plus 492 invisible characters across eight categories (zero-width, format/control, variation selectors, variation selector supplement, Mongolian Free Variation Selectors, Unicode Tag block, bidirectional controls, and C0/C1 controls).
+The Unicode Consortium maintains a \texttt{Confusables.txt} dataset with thousands of visually similar character pairs across dozens of scripts. navi-sanitize does not use it. Instead, the library maintains a curated map of 66 homoglyph pairs---the Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes that are actively weaponized in phishing, filter bypass, and injection attacks---plus 492 invisible characters across nine categories (zero-width, format/control, variation selectors, variation selector supplement, Mongolian Free Variation Selectors, Unicode Tag block, bidirectional controls, and C0/C1 controls).
 
-The curation is the feature. Every entry in the map is auditable by a human reading the source. Every entry has a documented security rationale. No false positives have been observed on legitimate Unicode text---including CJK, Arabic, Hebrew, and emoji---across 357 test cases and 100K fuzzing iterations, and the map covers the attack surface that matters in practice. Exhaustive coverage of all Unicode confusables would flag thousands of benign character pairs and require per-deployment tuning---exactly the operational burden this library exists to eliminate.
+The curation is the feature. Every entry in the map is auditable by a human reading the source. Every entry has a documented security rationale. No false positives have been observed on legitimate Unicode text---including CJK, Arabic, Hebrew, and emoji---across 361 test cases and 100K fuzzing iterations, and the map covers the attack surface that matters in practice. Exhaustive coverage of all Unicode confusables would flag thousands of benign character pairs and require per-deployment tuning---exactly the operational burden this library exists to eliminate.
 
 % ============================================================================
 % 4. PIPELINE DESIGN
@@ -243,7 +243,7 @@ Every string passed to \texttt{clean()} flows through six stages in strict order
 \textbf{Stage} & \textbf{Operation} & \textbf{What It Does} \\
 \midrule
 1 & Null byte strip & Remove \texttt{\textbackslash x00} (prevents C-extension truncation) \\
-2 & Invisible strip & Remove 492 chars across eight categories including zero-width, format/control, tag block, bidi, variation selectors, Mongolian FVS, and C0/C1 controls \\
+2 & Invisible strip & Remove 492 chars across nine categories including zero-width, format/control, tag block, bidi, variation selectors, Mongolian FVS, and C0/C1 controls \\
 3 & NFKC normalize & Collapse fullwidth ASCII, ligatures, math symbols to standard forms \\
 4 & Homoglyph replace & NFD decompose, then swap 66 Cyrillic/Greek/Armenian/Cherokee/typographic lookalikes to Latin \\
 5 & Re-NFKC & Re-normalize if Stage~4 changed anything (ensures idempotency) \\
@@ -304,7 +304,7 @@ clean(user_input, escaper=my_prompt_escaper)
 
 The pipeline's correctness rests on a single invariant: \textbf{idempotency}. For all inputs and all escaper configurations, \texttt{clean(clean(x))} must equal \texttt{clean(x)}. This is verified across every hostile input in the test suite and enforced as a fuzz invariant via Atheris.
 
-The test suite comprises 357 cases across six categories:
+The test suite comprises 361 cases across six categories:
 
 \begin{itemize}
 \item \textbf{Unit tests} for each stage in isolation and \texttt{clean()}/\texttt{walk()} end-to-end.

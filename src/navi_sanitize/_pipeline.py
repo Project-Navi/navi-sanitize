@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
 """Core sanitization pipeline.
 
-Five stages + optional escaper. Order matters:
+Six stages in strict order. Reordering breaks security:
 1. Null bytes   — prevent C-level string truncation
-2. Invisibles   — strip zero-width, tag block, bidi controls
+2. Invisibles   — strip 492 chars (zero-width, format/control, VS, tag block, bidi, C0/C1)
 3. NFKC         — normalize fullwidth and compatibility forms
-4. Homoglyphs   — replace confusable characters with ASCII
+4. Homoglyphs   — replace confusable characters with Latin equivalents
 5. Re-NFKC      — re-normalize if homoglyphs were replaced (idempotency)
-6. Escaper      — caller-supplied context-specific escaping
+6. Escaper      — caller-supplied context-specific escaping (optional)
 """
 
 from __future__ import annotations
@@ -73,9 +73,9 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 
     Stages (in order):
     1. Null byte removal
-    2. Invisible character stripping (zero-width, tag block, bidi)
-    3. NFKC normalization (fullwidth → ASCII)
-    4. Homoglyph replacement (Cyrillic/Greek → Latin)
+    2. Invisible character stripping (492 chars across 9 categories)
+    3. NFKC normalization (fullwidth → standard forms)
+    4. Homoglyph replacement (Cyrillic/Greek/Armenian/Cherokee/typographic → Latin)
     5. Re-NFKC (if homoglyphs were replaced — ensures idempotency)
     6. Escaper (if provided)
 

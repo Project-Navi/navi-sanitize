@@ -36,13 +36,13 @@ class TestInvisibleStripping:
     def test_strips_all_zero_width_chars(self) -> None:
         from navi_sanitize import clean
 
-        zw = "\u200b\u200c\u200d\u2060\ufeff\u180e"
+        zw = "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u180e"
         assert clean("a" + zw + "b") == "ab"
 
     def test_strips_tag_block_chars(self) -> None:
         from navi_sanitize import clean
 
-        # Tag block: U+E0001 through U+E007F encode invisible ASCII
+        # Tag block: U+E0000 through U+E007F (includes deprecated LANGUAGE TAG U+E0001)
         tag_hello = "".join(chr(0xE0000 + ord(c)) for c in "hello")
         assert clean("safe" + tag_hello + "text") == "safetext"
 
@@ -160,7 +160,7 @@ class TestEscaperIntegration:
         # Homoglyph replacement first, then escaper
         assert clean("n\u0430vi", escaper=upper_escaper) == "NAVI"
 
-    def test_no_escaper_skips_stage_5(self) -> None:
+    def test_no_escaper_skips_stage_6(self) -> None:
         from navi_sanitize import clean
 
         assert clean("{{ config }}") == "{{ config }}"
