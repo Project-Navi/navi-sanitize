@@ -103,11 +103,11 @@ BIDI_CONTROL_CHARS: set[str] = {
 _INVISIBLE_CHARS = (
     # Zero-width (individual chars)
     "["
-    + "".join(ZERO_WIDTH_CHARS)
+    + "".join(sorted(ZERO_WIDTH_CHARS))
     + "]"
     # Format/control (individual chars)
     + "|["
-    + "".join(FORMAT_CHARS)
+    + "".join(sorted(FORMAT_CHARS))
     + "]"
     # Variation selectors (range)
     + "|["
@@ -129,11 +129,11 @@ _INVISIBLE_CHARS = (
     + "]"
     # Mongolian FVS (individual chars)
     + "|["
-    + "".join(MONGOLIAN_FVS_CHARS)
+    + "".join(sorted(MONGOLIAN_FVS_CHARS))
     + "]"
     # Bidi controls (individual chars)
     + "|["
-    + "".join(BIDI_CONTROL_CHARS)
+    + "".join(sorted(BIDI_CONTROL_CHARS))
     + "]"
     # C0 controls (3 sub-ranges, excl NUL/TAB/LF/CR)
     + "|["

@@ -38,4 +38,4 @@ for raw_input in user_inputs:
     print(f"Raw:   {raw_input!r}")
     print(f"Clean: {safe_input!r}")
     print(f"Prompt length: {len(raw_input)} -> {len(safe_input)}")
-    print()
+    print(f"Final prompt:\n{prompt}\n")

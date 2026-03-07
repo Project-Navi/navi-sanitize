@@ -48,7 +48,7 @@ def _normalize_nfkc(s: str) -> tuple[str, bool]:
 
 
 def _replace_homoglyphs(s: str) -> tuple[str, int]:
-    """Replace homoglyphs with ASCII equivalents. Returns (cleaned, count).
+    """Replace homoglyphs with Latin equivalents. Returns (cleaned, count).
 
     Decomposes to NFD first so that combining marks cannot hide
     mapped base characters (e.g., Cyrillic U+0430 + breve composes
