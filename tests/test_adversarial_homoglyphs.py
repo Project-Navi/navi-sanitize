@@ -61,3 +61,56 @@ class TestNFKCCompositionBypass:
             first = clean(text)
             second = clean(first)
             assert first == second, f"Idempotency violated: {text!r} → {first!r} → {second!r}"
+
+
+class TestGreekLowercaseGaps:
+    """Greek lowercase chars missing from the original 54-pair map."""
+
+    def test_greek_mu(self) -> None:
+        assert clean("\u03bcser") == "user"
+
+    def test_greek_upsilon_lower(self) -> None:
+        assert clean("\u03c5ser") == "user"
+
+    def test_greek_kappa(self) -> None:
+        assert clean("\u03baey") == "key"
+
+    def test_greek_tau(self) -> None:
+        assert clean("\u03c4est") == "test"
+
+    def test_greek_gamma(self) -> None:
+        assert clean("\u03b3es") == "yes"
+
+    def test_greek_omega(self) -> None:
+        assert clean("\u03c9eb") == "web"
+
+
+class TestCyrillicExtendedGaps:
+    """Cyrillic chars with high visual similarity not in original map."""
+
+    def test_cyrillic_palochka_upper(self) -> None:
+        """U+04C0 — indistinguishable from I/l."""
+        assert clean("\u04c0nput") == "Input"
+
+    def test_cyrillic_palochka_lower(self) -> None:
+        """U+04CF — indistinguishable from l/I."""
+        assert clean("\u04cfog") == "log"
+
+    def test_cyrillic_komi_de(self) -> None:
+        """U+0501 — looks like d."""
+        assert clean("\u0501ata") == "data"
+
+    def test_cyrillic_qa(self) -> None:
+        """U+051B — looks like q."""
+        assert clean("\u051buery") == "query"
+
+    def test_cyrillic_we(self) -> None:
+        """U+051D — looks like w."""
+        assert clean("\u051deb") == "web"
+
+
+class TestLatinDotlessI:
+    """U+0131 (Latin dotless i) is near-identical to i in sans-serif."""
+
+    def test_dotless_i(self) -> None:
+        assert clean("adm\u0131n") == "admin"
