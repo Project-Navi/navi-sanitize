@@ -18,6 +18,14 @@ clean("price:\u200b 0")  # "price: 0" — zero-width space stripped
 clean("file\x00.txt")  # "file.txt" — null byte removed
 ```
 
+See the invisible:
+
+```python
+evil = "system\u200b\u200cprompt"  # looks like "systemprompt" but has 2 hidden chars
+len(evil)           # 14 (not 12!)
+clean(evil)         # "systemprompt" — hidden chars stripped
+```
+
 Opt-in utilities for deeper analysis: `decode_evasion()` peels nested URL/HTML/hex encodings, `detect_scripts()` and `is_mixed_script()` flag mixed-script spoofing.
 
 ## Why This Matters
@@ -30,11 +38,11 @@ navi-sanitize fixes the text before it reaches your application. It doesn't dete
 
 **Web applications** — Jinja2 SSTI, path traversal, and fullwidth encoding bypasses are well-known but tedious to cover manually. A single `clean(user_input, escaper=jinja2_escaper)` call handles homoglyph-disguised payloads like `{{ cоnfig }}` (Cyrillic `о`) that naive escaping misses.
 
-**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
+**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
 
 **Log analysis and SIEM** — Attackers embed bidi overrides and zero-width characters in log entries to hide indicators of compromise from analysts and pattern-matching tools. Sanitizing log data on ingest ensures what you search is what's actually there.
 
-**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
+**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
 
 ## How It Compares
 
@@ -125,6 +133,8 @@ from navi_sanitize import clean, jinja2_escaper
 safe_context = {k: clean(v, escaper=jinja2_escaper) for k, v in user_data.items()}
 template.render(**safe_context)
 ```
+
+See [examples/](examples/) for runnable scripts covering LLM pipelines, FastAPI/Pydantic, and log sanitization.
 
 ## Install
 
