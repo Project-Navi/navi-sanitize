@@ -2,7 +2,8 @@
 """Invisible character sets for stripping from untrusted text.
 
 Data module — contains no logic, only character definitions.
-Categories: zero-width, format/control, Unicode Tag block, bidirectional controls.
+Categories: zero-width, format/control, variation selectors, variation selector
+supplement, Unicode Tag block, bidirectional controls.
 """
 
 from __future__ import annotations
@@ -47,6 +48,15 @@ VARIATION_SELECTOR_SUPPLEMENT_RANGE = (0xE0100, 0xE01EF)
 # U+E0000 is the deprecated LANGUAGE TAG; U+E0001-U+E007F encode invisible
 # ASCII that tokenizers read but humans can't see (tag smuggling attacks).
 TAG_BLOCK_RANGE = (0xE0000, 0xE007F)
+
+# --- C0 control characters (U+0001-U+001F) ---
+# Excludes NUL (handled by stage 1), TAB (U+0009), LF (U+000A), CR (U+000D).
+# Includes dangerous chars: BS (U+0008, terminal overwrite), ESC (U+001B, ANSI injection).
+C0_CONTROL_RANGES = [(0x0001, 0x0008), (0x000B, 0x000C), (0x000E, 0x001F)]
+
+# --- C1 control characters (U+0080-U+009F) ---
+# Invisible in all modern contexts. U+009B (CSI) is equivalent to ESC+[.
+C1_CONTROL_RANGE = (0x0080, 0x009F)
 
 # --- Bidirectional override/isolate characters ---
 # Used to reorder displayed text, hiding malicious content.
@@ -93,6 +103,28 @@ _INVISIBLE_CHARS = (
     # Bidi controls (individual chars)
     + "|["
     + "".join(BIDI_CONTROL_CHARS)
+    + "]"
+    # C0 controls (3 sub-ranges, excl NUL/TAB/LF/CR)
+    + "|["
+    + chr(C0_CONTROL_RANGES[0][0])
+    + "-"
+    + chr(C0_CONTROL_RANGES[0][1])
+    + "]"
+    + "|["
+    + chr(C0_CONTROL_RANGES[1][0])
+    + "-"
+    + chr(C0_CONTROL_RANGES[1][1])
+    + "]"
+    + "|["
+    + chr(C0_CONTROL_RANGES[2][0])
+    + "-"
+    + chr(C0_CONTROL_RANGES[2][1])
+    + "]"
+    # C1 controls (range)
+    + "|["
+    + chr(C1_CONTROL_RANGE[0])
+    + "-"
+    + chr(C1_CONTROL_RANGE[1])
     + "]"
 )
 
