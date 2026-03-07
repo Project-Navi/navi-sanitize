@@ -7,8 +7,8 @@ packages = ["src/navi_sanitize"]
 
 [project]
 name = "navi-sanitize"
-version = "0.1.1"
-description = "Input sanitization pipeline for untrusted text. Deterministic. No ML. No false positives."
+version = "0.2.0"
+description = "Input sanitization pipeline for untrusted text. Deterministic. No ML. Legitimate Unicode preserved."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -19,7 +19,7 @@ maintainers = [
     { name = "Nelson Spence" }
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -29,10 +29,22 @@ classifiers = [
     "Topic :: Text Processing :: Filters",
     "Typing :: Typed",
 ]
+keywords = [
+    "sanitization",
+    "security",
+    "unicode",
+    "homoglyph",
+    "injection",
+    "invisible-characters",
+    "llm",
+    "prompt-injection",
+]
 
 [project.urls]
 Repository = "https://github.com/Project-Navi/navi-sanitize"
 Issues = "https://github.com/Project-Navi/navi-sanitize/issues"
+Changelog = "https://github.com/Project-Navi/navi-sanitize/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Project-Navi/navi-sanitize/wiki"
 
 [dependency-groups]
 dev = [

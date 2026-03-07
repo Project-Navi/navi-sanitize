@@ -62,6 +62,20 @@ HOMOGLYPH_MAP: dict[str, str] = {
     "\u03bd": "v",  # nu ν
     "\u03bf": "o",
     "\u03c1": "p",  # rho ρ
+    "\u03bc": "u",  # mu μ
+    "\u03c5": "u",  # upsilon υ
+    "\u03ba": "k",  # kappa κ
+    "\u03c4": "t",  # tau τ
+    "\u03b3": "y",  # gamma γ
+    "\u03c9": "w",  # omega ω
+    # Cyrillic Extended → Latin
+    "\u04c0": "I",  # palochka Ӏ
+    "\u04cf": "l",  # palochka (small) ӏ
+    "\u0501": "d",  # komi de ԁ
+    "\u051b": "q",  # qa ԛ
+    "\u051d": "w",  # we ԝ
+    # Latin Extended → Latin
+    "\u0131": "i",  # dotless i ı
     # Typographic
     "\u2212": "-",  # minus sign
     "\u2013": "-",  # en dash

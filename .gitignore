@@ -15,5 +15,7 @@ grippy-data/
 
 .benchmarks/
 
+coverage.xml
+
 # Internal docs — operational docs not for public tracking
 docs/internal/

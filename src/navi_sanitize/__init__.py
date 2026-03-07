@@ -13,7 +13,7 @@ from navi_sanitize.escapers import jinja2_escaper, path_escaper
 
 Escaper = Callable[[str], str]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "Escaper",
     "clean",

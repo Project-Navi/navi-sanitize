@@ -10,7 +10,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Deterministic input sanitization for untrusted text. Zero dependencies, zero false positives.
+Deterministic input sanitization for untrusted text. Zero dependencies. Legitimate Unicode preserved by design.
 
 ```python
 from navi_sanitize import clean
@@ -18,6 +18,14 @@ from navi_sanitize import clean
 clean("Неllo Wоrld")  # "Hello World" — Cyrillic Н/о replaced
 clean("price:\u200b 0")  # "price: 0" — zero-width space stripped
 clean("file\x00.txt")  # "file.txt" — null byte removed
+```
+
+See the invisible:
+
+```python
+evil = "system\u200b\u200cprompt"  # looks like "systemprompt" but has 2 hidden chars
+len(evil)           # 14 (not 12!)
+clean(evil)         # "systemprompt" — hidden chars stripped
 ```
 
 Opt-in utilities for deeper analysis: `decode_evasion()` peels nested URL/HTML/hex encodings, `detect_scripts()` and `is_mixed_script()` flag mixed-script spoofing.
@@ -32,11 +40,11 @@ navi-sanitize fixes the text before it reaches your application. It doesn't dete
 
 **Web applications** — Jinja2 SSTI, path traversal, and fullwidth encoding bypasses are well-known but tedious to cover manually. A single `clean(user_input, escaper=jinja2_escaper)` call handles homoglyph-disguised payloads like `{{ cоnfig }}` (Cyrillic `о`) that naive escaping misses.
 
-**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
+**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
 
 **Log analysis and SIEM** — Attackers embed bidi overrides and zero-width characters in log entries to hide indicators of compromise from analysts and pattern-matching tools. Sanitizing log data on ingest ensures what you search is what's actually there.
 
-**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
+**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
 
 ## How It Compares
 
@@ -45,8 +53,8 @@ navi-sanitize is the only library that combines invisible character stripping, h
 | | navi-sanitize | Unidecode / anyascii | confusable_homoglyphs | ftfy | MarkupSafe / nh3 |
 |---|---|---|---|---|---|
 | **Purpose** | Security sanitization | ASCII transliteration | Homoglyph detection | Encoding repair | HTML escaping |
-| **Invisible chars** | Strips 411 (bidi, tag block, ZW, VS) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
-| **Homoglyphs** | Replaces 54 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
+| **Invisible chars** | Strips 492 (bidi, tag block, ZW, VS, C0/C1) | Incidental | No | Partial (preserves bidi, ZW, VS) | No |
+| **Homoglyphs** | Replaces 66 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
 | **NFKC** | Yes | No | No | NFC (NFKC optional) | No |
 | **Null bytes** | Yes | No | No | No | No |
 | **Preserves Unicode** | Yes (CJK, Arabic, emoji intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
@@ -55,7 +63,7 @@ navi-sanitize is the only library that combines invisible character stripping, h
 
 **Key differences:**
 
-- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 54 highest-risk lookalikes and leaves legitimate Unicode intact.
+- **Unidecode / anyascii** transliterate *all* non-ASCII to Latin. They turn `"` into `"Zhong"` and Cyrillic sentences into gibberish. navi-sanitize normalizes only the 66 highest-risk lookalikes and leaves legitimate Unicode intact.
 - **confusable_homoglyphs** uses the full Unicode Consortium confusables dataset (thousands of pairs) but only *detects* — you'd need to write your own replacement layer. It's also archived.
 - **ftfy** is complementary, not competing. It fixes encoding corruption and explicitly *preserves* bidi overrides and zero-width characters that navi-sanitize strips. Different threat model.
 - **MarkupSafe / nh3** handle HTML structure; navi-sanitize handles the character-level content *inside* that structure. They compose naturally.
@@ -128,6 +136,8 @@ safe_context = {k: clean(v, escaper=jinja2_escaper) for k, v in user_data.items(
 template.render(**safe_context)
 ```
 
+See [examples/](examples/) for runnable scripts covering LLM pipelines, FastAPI/Pydantic, and log sanitization.
+
 ## Install
 
 ```
@@ -154,7 +164,7 @@ from navi_sanitize import decode_evasion, clean, detect_scripts, is_mixed_script
 raw = "%252e%252e%252fetc%252fpasswd"
 
 # 1. Peel nested encodings (URL → HTML entities → hex escapes)
-peeled = decode_evasion(raw)           # "../etc/passwd"
+peeled = decode_evasion(raw)           # "../../etc/passwd"
 
 # 2. Sanitize through the universal pipeline
 cleaned = clean(peeled, escaper=path_escaper)  # "etc/passwd"
@@ -183,14 +193,14 @@ These are different problems with mature, purpose-built solutions. navi-sanitize
 
 ## Warnings
 
-The pipeline never errors. It always produces output. When it changes something, it logs a warning.
+The pipeline never errors on valid string input. It always produces output. Non-string arguments raise `TypeError`. When it changes something, it logs a warning.
 
 ```python
 import logging
 logging.basicConfig()
 
 clean("pаypal.com")
-# WARNING:navi_sanitize: Replaced 1 homoglyph(s) in value
+# WARNING:navi_sanitize:Replaced 1 homoglyph(s) in value
 # Returns: "paypal.com"
 ```
 

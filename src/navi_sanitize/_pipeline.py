@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
 """Core sanitization pipeline.
 
-Five stages + optional escaper. Order matters:
+Six stages in strict order. Reordering breaks security:
 1. Null bytes   — prevent C-level string truncation
-2. Invisibles   — strip zero-width, tag block, bidi controls
+2. Invisibles   — strip 492 chars (zero-width, format/control, VS, tag block, bidi, C0/C1)
 3. NFKC         — normalize fullwidth and compatibility forms
-4. Homoglyphs   — replace confusable characters with ASCII
+4. Homoglyphs   — replace confusable characters with Latin equivalents
 5. Re-NFKC      — re-normalize if homoglyphs were replaced (idempotency)
-6. Escaper      — caller-supplied context-specific escaping
+6. Escaper      — caller-supplied context-specific escaping (optional)
 """
 
 from __future__ import annotations
@@ -48,14 +48,24 @@ def _normalize_nfkc(s: str) -> tuple[str, bool]:
 
 
 def _replace_homoglyphs(s: str) -> tuple[str, int]:
-    """Replace homoglyphs with ASCII equivalents. Returns (cleaned, count)."""
+    """Replace homoglyphs with Latin equivalents. Returns (cleaned, count).
+
+    Decomposes to NFD first so that combining marks cannot hide
+    mapped base characters (e.g., Cyrillic U+0430 + breve composes
+    to U+04D1 in NFKC, but NFD exposes the base char for replacement).
+    """
+    decomposed = unicodedata.normalize("NFD", s)
     count = 0
-    chars = list(s)
+    chars = list(decomposed)
     for i, ch in enumerate(chars):
         if ch in HOMOGLYPH_MAP:
             chars[i] = HOMOGLYPH_MAP[ch]
             count += 1
-    return "".join(chars), count
+    result = "".join(chars)
+    # Recompose so the caller always gets NFC-stable text, even when
+    # no replacements were made (NFD would otherwise leak out).
+    result = unicodedata.normalize("NFC", result)
+    return result, count
 
 
 def clean(text: str, *, escaper: Escaper | None = None) -> str:
@@ -63,9 +73,9 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 
     Stages (in order):
     1. Null byte removal
-    2. Invisible character stripping (zero-width, tag block, bidi)
-    3. NFKC normalization (fullwidth → ASCII)
-    4. Homoglyph replacement (Cyrillic/Greek → Latin)
+    2. Invisible character stripping (492 chars across 9 categories)
+    3. NFKC normalization (fullwidth → standard forms)
+    4. Homoglyph replacement (Cyrillic/Greek/Armenian/Cherokee/typographic → Latin)
     5. Re-NFKC (if homoglyphs were replaced — ensures idempotency)
     6. Escaper (if provided)
 
@@ -93,12 +103,12 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     text, glyph_count = _replace_homoglyphs(text)
     if glyph_count:
         logger.warning("Replaced %d homoglyph(s) in value", glyph_count)
-        # Re-normalize: homoglyph replacement can produce Latin chars that
+        # Stage 5: Re-NFKC — homoglyph replacement can produce Latin chars that
         # combine with adjacent combining marks (e.g. Greek U+03A5 + combining
         # tilde -> Latin Y + combining tilde -> NFKC composes to U+1EF8).
         text, _ = _normalize_nfkc(text)
 
-    # Stage 5: Escaper
+    # Stage 6: Escaper
     if escaper is not None:
         text = escaper(text)
         if not isinstance(text, str):

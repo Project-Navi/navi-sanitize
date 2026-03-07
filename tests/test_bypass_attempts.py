@@ -11,12 +11,12 @@ from __future__ import annotations
 from navi_sanitize import clean, jinja2_escaper, path_escaper
 
 # =============================================================================
-# HOMOGLYPH MAP GAPS — confusables not in the 42-pair map
+# HOMOGLYPH MAP GAPS — confusables not in the 66-pair map
 # =============================================================================
 
 
 class TestHomoglyphMapGaps:
-    """The map has 42 pairs. Unicode has thousands of confusables.
+    """The map has 66 pairs. Unicode has thousands of confusables.
     Can we sneak lookalikes through?"""
 
     # --- Armenian lookalikes ---
@@ -85,12 +85,12 @@ class TestHomoglyphMapGaps:
 
 
 # =============================================================================
-# INVISIBLE CHARACTERS NOT IN THE STRIP LIST
+# INVISIBLE CHARACTER COVERAGE
 # =============================================================================
 
 
-class TestInvisibleGaps:
-    """Characters that are invisible/near-invisible but not stripped."""
+class TestInvisibleCoverage:
+    """Characters that are invisible/near-invisible — verify they are stripped."""
 
     def test_soft_hyphen(self) -> None:
         # U+00AD — soft hyphen, invisible in most contexts
@@ -270,7 +270,7 @@ class TestStageOrderExploits:
         # { + (invisible) + { → {{ after stripping
         # This is the core attack. Does the order handle it?
         result = clean("{\u200b{ config }\u200b}", escaper=jinja2_escaper)
-        assert "{{" not in result  # Stage 2 strips, creating {{, Stage 5 escapes
+        assert "{{" not in result  # Stage 2 strips, creating {{, Stage 6 escapes
 
     def test_nfkc_creates_delimiter(self) -> None:
         # Fullwidth { (U+FF5B) normalizes to { under NFKC

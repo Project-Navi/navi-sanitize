@@ -50,8 +50,8 @@ class TestZeroWidthAttacks:
             assert clean("te\u200bst") == "test"
         assert "invisible" in caplog.text.lower()
 
-    def test_all_six_zero_width(self, caplog: pytest.LogCaptureFixture) -> None:
-        zw = "\u200b\u200c\u200d\u2060\ufeff\u180e"
+    def test_all_eight_zero_width(self, caplog: pytest.LogCaptureFixture) -> None:
+        zw = "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u180e"
         with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
             assert clean("a" + zw + "b") == "ab"
 
