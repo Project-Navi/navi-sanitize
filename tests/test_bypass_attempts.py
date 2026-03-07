@@ -11,12 +11,12 @@ from __future__ import annotations
 from navi_sanitize import clean, jinja2_escaper, path_escaper
 
 # =============================================================================
-# HOMOGLYPH MAP GAPS — confusables not in the 42-pair map
+# HOMOGLYPH MAP GAPS — confusables not in the 66-pair map
 # =============================================================================
 
 
 class TestHomoglyphMapGaps:
-    """The map has 42 pairs. Unicode has thousands of confusables.
+    """The map has 66 pairs. Unicode has thousands of confusables.
     Can we sneak lookalikes through?"""
 
     # --- Armenian lookalikes ---

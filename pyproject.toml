@@ -43,6 +43,8 @@ keywords = [
 [project.urls]
 Repository = "https://github.com/Project-Navi/navi-sanitize"
 Issues = "https://github.com/Project-Navi/navi-sanitize/issues"
+Changelog = "https://github.com/Project-Navi/navi-sanitize/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/Project-Navi/navi-sanitize/wiki"
 
 [dependency-groups]
 dev = [

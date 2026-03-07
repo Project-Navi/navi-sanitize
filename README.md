@@ -162,7 +162,7 @@ from navi_sanitize import decode_evasion, clean, detect_scripts, is_mixed_script
 raw = "%252e%252e%252fetc%252fpasswd"
 
 # 1. Peel nested encodings (URL → HTML entities → hex escapes)
-peeled = decode_evasion(raw)           # "../etc/passwd"
+peeled = decode_evasion(raw)           # "../../etc/passwd"
 
 # 2. Sanitize through the universal pipeline
 cleaned = clean(peeled, escaper=path_escaper)  # "etc/passwd"
@@ -191,14 +191,14 @@ These are different problems with mature, purpose-built solutions. navi-sanitize
 
 ## Warnings
 
-The pipeline never errors. It always produces output. When it changes something, it logs a warning.
+The pipeline never errors on valid string input. It always produces output. Non-string arguments raise `TypeError`. When it changes something, it logs a warning.
 
 ```python
 import logging
 logging.basicConfig()
 
 clean("pаypal.com")
-# WARNING:navi_sanitize: Replaced 1 homoglyph(s) in value
+# WARNING:navi_sanitize:Replaced 1 homoglyph(s) in value
 # Returns: "paypal.com"
 ```
 

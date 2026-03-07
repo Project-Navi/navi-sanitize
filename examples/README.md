@@ -11,7 +11,7 @@ Runnable examples for common navi-sanitize use cases.
 ## Running
 
 ```bash
-# No dependencies needed (all examples use only navi-sanitize)
+# Only navi-sanitize is required; fastapi and pydantic are optional
 pip install navi-sanitize
 
 python examples/llm_pipeline.py
