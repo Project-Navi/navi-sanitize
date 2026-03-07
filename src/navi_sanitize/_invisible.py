@@ -35,6 +35,23 @@ FORMAT_CHARS: set[str] = {
     "\ufffa",  # interlinear annotation separator
     "\ufffb",  # interlinear annotation terminator
     "\ufffc",  # object replacement character
+    "\u2061",  # function application (invisible)
+    "\u2062",  # invisible times
+    "\u2063",  # invisible separator
+    "\u2064",  # invisible plus
+    "\u206a",  # inhibit symmetric swapping (deprecated)
+    "\u206b",  # activate symmetric swapping (deprecated)
+    "\u206c",  # inhibit Arabic form shaping (deprecated)
+    "\u206d",  # activate Arabic form shaping (deprecated)
+    "\u206e",  # national digit shapes (deprecated)
+    "\u206f",  # nominal digit shapes (deprecated)
+    "\u2800",  # braille pattern blank
+    "\u1680",  # Ogham space mark
+    "\u115f",  # Hangul Choseong filler
+    "\u1160",  # Hangul Jungseong filler
+    "\u3164",  # Hangul filler (NFKC → U+1160)
+    "\uffa0",  # Halfwidth Hangul filler (NFKC → U+1160)
+    "\u061c",  # Arabic letter mark
 }
 
 # --- Variation selectors ---
@@ -43,6 +60,15 @@ FORMAT_CHARS: set[str] = {
 # Both are invisible modifiers that change glyph presentation.
 VARIATION_SELECTOR_RANGE = (0xFE00, 0xFE0F)
 VARIATION_SELECTOR_SUPPLEMENT_RANGE = (0xE0100, 0xE01EF)
+
+# --- Mongolian Free Variation Selectors ---
+# Functionally identical to VS1-VS16. U+180B-U+180D, U+180F (U+180E already in ZERO_WIDTH).
+MONGOLIAN_FVS_CHARS: set[str] = {
+    "\u180b",  # Mongolian free variation selector one
+    "\u180c",  # Mongolian free variation selector two
+    "\u180d",  # Mongolian free variation selector three
+    "\u180f",  # Mongolian free variation selector four
+}
 
 # --- Unicode Tag block (U+E0000-U+E007F) ---
 # U+E0000 is the deprecated LANGUAGE TAG; U+E0001-U+E007F encode invisible
@@ -99,6 +125,10 @@ _INVISIBLE_CHARS = (
     + chr(VARIATION_SELECTOR_SUPPLEMENT_RANGE[0])
     + "-"
     + chr(VARIATION_SELECTOR_SUPPLEMENT_RANGE[1])
+    + "]"
+    # Mongolian FVS (individual chars)
+    + "|["
+    + "".join(MONGOLIAN_FVS_CHARS)
     + "]"
     # Bidi controls (individual chars)
     + "|["
