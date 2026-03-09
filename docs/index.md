@@ -4,8 +4,6 @@ hide:
   - toc
 ---
 
-<div class="hero-glow" markdown>
-
 # navi-sanitize
 
 **Deterministic input sanitization for untrusted text.** Zero dependencies. No ML. Legitimate Unicode preserved by design.
@@ -14,8 +12,6 @@ navi-sanitize removes invisible attacks from untrusted text before it reaches yo
 
 [Get Started](getting-started/quickstart.md){ .md-button .md-button--primary }
 [API Reference](reference/api.md){ .md-button }
-
-</div>
 
 ---
 
