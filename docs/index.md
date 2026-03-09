@@ -19,6 +19,16 @@ navi-sanitize removes invisible attacks from untrusted text before it reaches yo
 
 ---
 
+## See the invisible
+
+```python
+evil = "system\u200b\u200cprompt"  # looks like "systemprompt" but has 2 hidden chars
+len(evil)           # 14 (not 12!)
+clean(evil)         # "systemprompt" — hidden chars stripped
+```
+
+---
+
 ## Features
 
 - **6-stage pipeline** --- null bytes, invisible characters, NFKC normalization, homoglyph replacement, re-NFKC for idempotency, pluggable escaper
