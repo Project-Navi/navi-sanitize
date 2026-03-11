@@ -15,6 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Required check: lint ────────────────────────────────────────────
+  # CONTRACT: org ruleset requires this exact check name
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -29,6 +31,8 @@ jobs:
       - name: Ruff format
         run: uv run ruff format --check src/ tests/
 
+  # ── Required check: typecheck ───────────────────────────────────────
+  # CONTRACT: org ruleset requires this exact check name
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -41,7 +45,8 @@ jobs:
       - name: Mypy
         run: uv run mypy --strict src/navi_sanitize/
 
-  test:
+  # ── Test matrix (NOT a required check) ──────────────────────────────
+  test-run:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -76,6 +81,23 @@ jobs:
           run_command: send-notifications
           fail_ci_if_error: false
 
+  # ── Required check: test (aggregator) ───────────────────────────────
+  # CONTRACT: org ruleset requires this exact check name
+  test:
+    needs: test-run
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check matrix results
+        run: |
+          if [ "${{ needs.test-run.result }}" != "success" ]; then
+            echo "::error::Test matrix failed"
+            exit 1
+          fi
+
+  # ── Required check: security ────────────────────────────────────────
+  # CONTRACT: org ruleset requires this exact check name
   security:
     runs-on: ubuntu-latest
     steps:
@@ -88,6 +110,28 @@ jobs:
       - name: pip-audit
         run: uvx pip-audit==2.9.0
 
+  # ── Required check: quality-gate ────────────────────────────────────
+  # CONTRACT: org ruleset requires this exact check name
+  quality-gate:
+    needs: [test, lint, typecheck, security]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          for result in \
+            "${{ needs.test.result }}" \
+            "${{ needs.lint.result }}" \
+            "${{ needs.typecheck.result }}" \
+            "${{ needs.security.result }}"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::Required job failed: $result"
+              exit 1
+            fi
+          done
+
+  # ── Non-required: build smoke test ──────────────────────────────────
   build:
     needs: [lint, typecheck, test, security]
     runs-on: ubuntu-latest
