@@ -356,15 +356,31 @@ class TestLoggingEdgeCases:
 
 
 class TestRecursionLimits:
-    def test_recursion_near_limit(self) -> None:
-        """Build a structure near Python's recursion limit."""
+    def test_recursion_beyond_python_limit(self) -> None:
+        """Iterative walker handles depth beyond Python's recursion limit."""
         depth = min(sys.getrecursionlimit() // 4, 250)
         data: object = "n\u0430vi"
         for _ in range(depth):
             data = [data]
-        result = walk(data)
+        result = walk(data, max_depth=depth)
         node = result
         for _ in range(depth):
             assert isinstance(node, list)
             node = node[0]
         assert node == "navi"
+
+    def test_cyclic_dict_does_not_loop(self) -> None:
+        """Cyclic dict terminates and returns a copy with the cycle."""
+        d: dict[str, object] = {"name": "n\u0430vi"}
+        d["self"] = d
+        result = walk(d)
+        assert result["name"] == "navi"
+        assert result["self"] is result  # cycle preserved in copy
+
+    def test_cyclic_list_does_not_loop(self) -> None:
+        """Cyclic list terminates and returns a copy with the cycle."""
+        lst: list[object] = ["n\u0430vi"]
+        lst.append(lst)
+        result = walk(lst)
+        assert result[0] == "navi"
+        assert result[1] is result  # cycle preserved in copy
