@@ -18,7 +18,7 @@ jobs:
 
   build:
     needs: [ci]
-    uses: Project-Navi/.github/.github/workflows/_build-reusable.yml@83f5a6860e88af77ecebda9d90836c6e7caec159
+    uses: Project-Navi/.github/.github/workflows/_build-reusable.yml@b803d378bb9535feae4f877990fbc50352200247
     with:
       tag_name: ${{ github.event.release.tag_name }}
       package_name: navi_sanitize
