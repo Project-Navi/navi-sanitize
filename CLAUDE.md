@@ -61,7 +61,7 @@ Uses `src/` layout (`src/navi_sanitize/`). Internal modules prefixed with `_`.
 
 ### Public API (`__init__.py`)
 
-Eight exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=None) -> T`, escapers (`jinja2_escaper`, `path_escaper`), `Escaper = Callable[[str], str]`, and opt-in utilities (`decode_evasion`, `detect_scripts`, `is_mixed_script`).
+Eight exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=None, max_depth=128) -> T`, escapers (`jinja2_escaper`, `path_escaper`), `Escaper = Callable[[str], str]`, and opt-in utilities (`decode_evasion`, `detect_scripts`, `is_mixed_script`).
 
 ### Pipeline (`_pipeline.py`)
 
@@ -94,7 +94,7 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 - **Test oracle:** for inputs covered by navi-bootstrap's adversarial suite, `clean(text, escaper=jinja2_escaper)` must match navi-bootstrap's `_sanitize_string(text, escape_jinja=True)` exactly
 - **Warnings include counts:** `"Stripped 3 invisible character(s)"` not `"Stripped invisible character(s)"`
 - **`NullHandler` on library logger** — app configures handlers, not the library
-- **`walk()` uses `deepcopy`** — original data never modified; PEP 695 `def walk[T]()` for return type
+- **`walk()` is non-mutating** — original data never modified; PEP 695 `def walk[T]()` for return type; default `max_depth=128`; performs a single iterative copy-and-sanitize pass; escaper output is NOT re-sanitized (trust boundary)
 - **No remote push** without explicit approval — local only until told otherwise
 
 ## Gotchas
@@ -104,3 +104,5 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 - **pytest-benchmark `pedantic()`** required for large payloads (100KB) — standard mode runs too many iterations
 - **No CLI, no config files, no framework dependencies** — this is a library only
 - **No LLM prompt escaper** — vendor syntax moves too fast; pluggable design lets users build their own
+- **`walk()` default `max_depth=128`** — existing tests for deep nesting must pass `max_depth=` explicitly if depth exceeds 128
+- **Escaper trust boundary** — escaper output is NOT re-sanitized; custom escapers can re-introduce hostile characters by design

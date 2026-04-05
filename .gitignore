@@ -10,6 +10,7 @@ build/
 .coverage
 .dev.vars
 .claude/
+.claude-flow/
 .serena/
 grippy-data/
 
