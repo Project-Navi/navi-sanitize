@@ -7,7 +7,7 @@ packages = ["src/navi_sanitize"]
 
 [project]
 name = "navi-sanitize"
-version = "0.2.0"
+version = "0.2.1"
 description = "Input sanitization pipeline for untrusted text. Deterministic. No ML. Legitimate Unicode preserved."
 readme = "README.md"
 license = "MIT"
