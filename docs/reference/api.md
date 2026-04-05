@@ -56,11 +56,11 @@ clean(42)  # TypeError: clean() requires str, got int
 
 ---
 
-## `walk(data, *, escaper=None)`
+## `walk(data, *, escaper=None, max_depth=128)`
 
 Recursively sanitize every string in a dict/list/nested structure.
 
-Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None) -> T`
+Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None, max_depth=128) -> T`
 
 **Parameters:**
 
@@ -68,8 +68,11 @@ Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None) -> T`
 |-----------|------|---------|-------------|
 | `data` | `T` | *(required)* | Any Python object; strings within dicts/lists are sanitized |
 | `escaper` | `Escaper \| None` | `None` | Optional escaper function applied to each string |
+| `max_depth` | `int` | `128` | Maximum nesting depth of containers; logs a warning and continues if exceeded. `ValueError` if negative |
 
 **Returns:** `T` --- a deep copy of the input with all strings sanitized.
+
+**Raises:** `ValueError` --- if `max_depth` is negative.
 
 **Behavior by type:**
 
@@ -78,9 +81,10 @@ Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None) -> T`
 | `str` | Passed through `clean()` |
 | `dict` | Both keys and values sanitized recursively |
 | `list` | Elements sanitized recursively |
-| `tuple`, `set`, `bytes`, `int`, `float`, `bool`, `None` | Passed through unchanged |
+| `tuple`, `set`, `frozenset` | Passed through by reference, not traversed |
+| `bytes`, `int`, `float`, `bool`, `None` | Passed through unchanged |
 
-The original data is **never modified** --- `walk()` operates on a `deepcopy`.
+The original data is **never modified** --- `walk()` uses a single iterative copy-and-sanitize pass (no recursion, no `deepcopy`). Each container is copied exactly once; cyclic references are handled via identity tracking.
 
 **Examples:**
 
@@ -101,6 +105,12 @@ walk({"\u0430dmin": "value"})  # {"admin": "value"}
 # Non-dict/list input
 walk("he\x00llo")  # "hello"
 walk(42)            # 42
+
+# Custom depth limit
+walk(deep_structure, max_depth=256)
+
+# Warning on excessive nesting (continues sanitizing)
+walk(hostile_json)  # logs: "walk() input exceeds max_depth=128; continuing to sanitize"
 ```
 
 ---

@@ -106,6 +106,11 @@ clean(user_input)
 
 An escaper is a function: `str -> str`. Write one in three lines.
 
+> **Security note:** The escaper runs as the final pipeline stage.
+> Its output is **not** re-sanitized. Built-in escapers are tested.
+> Custom escapers are your responsibility — a buggy escaper can
+> re-introduce characters the pipeline removed.
+
 ## Framework Integration
 
 ```python
@@ -154,6 +159,8 @@ from navi_sanitize import walk
 # Recursively sanitize every string in a dict/list
 spec = walk(untrusted_json)
 ```
+
+`walk()` warns when nesting exceeds 128 levels by default; pass `max_depth=` to adjust. Traverses dicts and lists only — tuples and sets pass through by reference.
 
 ## Opt-in Utilities
 
