@@ -43,15 +43,18 @@ pre-commit run --all-files
 
 ## CI
 
-GitHub Actions runs on push to `main` and all PRs. Five parallel jobs:
+GitHub Actions runs on push to `main` and all PRs. Four parallel required checks, then downstream gates:
 
 - **lint** — `ruff check` + `ruff format --check`
 - **typecheck** — `mypy --strict src/navi_sanitize/`
-- **test** — pytest across Python 3.12 + 3.13, `--benchmark-disable`
+- **test** — pytest across Python 3.12 + 3.13, `--benchmark-disable` (matrix → aggregator)
 - **security** — `pip-audit` dependency vulnerability scan
-- **build** — gates on all four above; builds wheel, smoke-tests public API, uploads artifact
+- **quality-gate** — gates on all four above (org ruleset required check)
+- **build** — gates on all four required checks; builds wheel, smoke-tests imports (`clean`, `walk`, `jinja2_escaper`, `path_escaper`), uploads artifact
 
-Additional security workflows: Semgrep SAST, CodeQL (`python` + `actions`), OpenSSF Scorecard.
+Additional security workflows: Semgrep SAST, CodeQL (`python` + `actions` via org GHAS), OpenSSF Scorecard.
+
+**Fuzz testing** (`.github/workflows/fuzz.yml`) — Atheris fuzzing of `fuzz_clean` and `fuzz_walk` targets, runs on push/PR and weekly schedule (Wednesday 03:00 UTC). Uploads crash artifacts on failure.
 
 Benchmarks run via manual dispatch only (`.github/workflows/benchmark.yml`).
 
@@ -68,17 +71,17 @@ Eight exports: `clean(text, *, escaper=None) -> str`, `walk(data, *, escaper=Non
 Six stages in strict order — reordering breaks security:
 
 1. **Null byte removal** — strip `\x00` (prevents C-extension truncation)
-2. **Invisible character stripping** — single compiled regex covering zero-width chars, format/control chars, variation selectors, Unicode Tag block (`U+E0000`-`U+E007F`), and bidi overrides
+2. **Invisible character stripping** — single compiled regex covering 492 chars across 9 categories: zero-width, format/control, variation selectors, variation selector supplement, Mongolian FVS, Unicode Tag block (`U+E0000`-`U+E007F`), bidirectional controls, C0 controls, and C1 controls
 3. **NFKC normalization** — collapses fullwidth ASCII and compatibility forms
 4. **Homoglyph replacement** — NFD decomposition then character-by-character scan against 66-pair map in `_homoglyphs.py`
 5. **Re-NFKC** (conditional) — re-normalize after homoglyph replacement to ensure idempotency
 6. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
 
-Each stage returns `(cleaned_string, count_or_flag)` — either an `int` count of removals/replacements or a `bool` changed flag. Stages have no side effects — the orchestrator logs.
+Stages 1–5 each return `(cleaned_string, count)` where `count` is an `int` for removals, replacements, or normalization changes. Stage 6 (escaper) is a `Callable[[str], str]` that returns a bare `str`. Stages have no side effects — the orchestrator logs.
 
 ### Data files
 
-- `_homoglyphs.py` — 66 pairs: Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes
+- `_homoglyphs.py` — 66 pairs: Cyrillic, Greek, Armenian, Cherokee, Cyrillic Extended, Latin Extended, and typographic lookalikes
 - `_invisible.py` — zero-width, format/control (soft hyphen, thin/hair space, line/paragraph separators, etc.), variation selectors, variation selector supplement, Mongolian FVS, Unicode Tag block, bidirectional controls, C0 controls, and C1 controls
 
 ### Escapers (`escapers/`)

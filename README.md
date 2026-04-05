@@ -10,7 +10,11 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Deterministic input sanitization for untrusted text. Zero dependencies. Legitimate Unicode preserved by design.
+Deterministic input sanitization for untrusted text — invisible characters, homoglyphs, and encoding tricks, handled before your code sees them. Zero dependencies, no ML. Legitimate Unicode preserved by design.
+
+```
+pip install navi-sanitize
+```
 
 **[Documentation](https://project-navi.github.io/navi-sanitize/)** · [Getting Started](https://project-navi.github.io/navi-sanitize/getting-started/quickstart/) · [API Reference](https://project-navi.github.io/navi-sanitize/reference/api/) · [Threat Model](https://project-navi.github.io/navi-sanitize/explanation/threat-model/)
 
@@ -34,19 +38,21 @@ Opt-in utilities for deeper analysis: `decode_evasion()` peels nested URL/HTML/h
 
 ## Why This Matters
 
-Untrusted text contains invisible attacks: homoglyph substitution, zero-width characters, null bytes, fullwidth encoding, template/prompt injection delimiters. These bypass validation, poison templates, and fool humans.
+Untrusted text contains invisible attacks: homoglyph substitution, zero-width characters, null bytes, fullwidth encoding, template/prompt injection delimiters. These bypass validation, poison templates, and fool humans. Framework validators handle format and type — they don't handle Unicode deception. That's what this library is for.
 
-navi-sanitize fixes the text before it reaches your application. It doesn't detect attacks — it removes them.
+navi-sanitize fixes the text before it reaches your application. It doesn't detect attacks — it removes them. Implements the NFKC + zero-width + control character pipeline recommended by the [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
 
-**LLM prompt pipelines** — User input flows into system prompts, RAG context, and tool calls. Invisible Unicode (tag block characters, bidi overrides) encodes instructions that tokenizers read but humans can't see. Homoglyphs bypass keyword filters. navi-sanitize strips these vectors before text reaches the model, and the pluggable escaper lets you add vendor-specific prompt escaping on top.
+**LLM prompt pipelines** — Character-level attacks bypass LLM guardrails at [64–67% success rates](https://arxiv.org/html/2504.11168v1). Invisible Unicode encodes instructions tokenizers read but humans can't see. Homoglyphs bypass keyword filters. Sanitize before the model sees it.
 
-**Web applications** — Jinja2 SSTI, path traversal, and fullwidth encoding bypasses are well-known but tedious to cover manually. A single `clean(user_input, escaper=jinja2_escaper)` call handles homoglyph-disguised payloads like `{{ cоnfig }}` (Cyrillic `о`) that naive escaping misses.
+**Web applications** — A single `clean(user_input, escaper=jinja2_escaper)` call handles homoglyph-disguised SSTI payloads like `{{ cоnfig }}` (Cyrillic `о`) that naive escaping misses.
 
-**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com` in most fonts. Homoglyph replacement normalizes display names, URLs, and email addresses to catch spoofing that visual inspection misses.
+**Identity and anti-phishing** — `pаypal.com` (Cyrillic `а`) renders identically to `paypal.com`. The only maintained Python homoglyph replacement library — both [confusable_homoglyphs](https://github.com/vhf/confusable_homoglyphs) and [homoglyphs](https://github.com/life4/homoglyphs) are archived.
 
-**Log analysis and SIEM** — Attackers embed bidi overrides and zero-width characters in log entries to hide indicators of compromise from analysts and pattern-matching tools. Sanitizing log data on ingest ensures what you search is what's actually there.
+**Log analysis** — Bidi overrides and zero-width chars hide IOCs from analysts. Sanitize on ingest so search matches reality.
 
-**Config and data ingestion** — YAML, TOML, and JSON parsed from untrusted sources can carry null bytes that truncate C-extension processing, zero-width characters that break key matching, and homoglyphs that create near-duplicate keys. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
+**Config ingestion** — Null bytes truncate C-extension processing, zero-width chars break key matching. `walk(parsed_config)` sanitizes every string in a nested structure in one call.
+
+These aren't theoretical risks — [CVE-2024-43093](https://nvd.nist.gov/vuln/detail/CVE-2024-43093) was an actively exploited Android zero-day using the exact fullwidth character bypass this pipeline prevents.
 
 ## How It Compares
 
@@ -59,9 +65,11 @@ navi-sanitize is the only library that combines invisible character stripping, h
 | **Homoglyphs** | Replaces 66 curated pairs | Transliterates all non-ASCII | Detects only (no replace) | No | No |
 | **NFKC** | Yes | No | No | NFC (NFKC optional) | No |
 | **Null bytes** | Yes | No | No | No | No |
-| **Preserves Unicode** | Yes (CJK, Arabic, emoji intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
+| **Preserves Unicode** | Yes (CJK, Arabic, emoji¹ intact) | No (destroys all non-ASCII) | Yes | Yes | Yes |
 | **Pluggable escaper** | Yes | No | No | No | N/A (HTML-specific) |
 | **Dependencies** | Zero | Zero | Zero | wcwidth | C ext / Rust ext |
+
+¹ ZWJ (U+200D) is stripped as a zero-width character, which decomposes ZWJ emoji sequences (e.g. family emoji) into individual emoji. Single emoji are unaffected. Bidi formatting marks (U+061C, U+200E/F, etc.) used in Arabic/Hebrew are also stripped — correct rendering may require re-adding directional marks downstream.
 
 **Key differences:**
 
@@ -78,9 +86,9 @@ Every string passes through stages in order. Each stage returns clean output and
 | Stage | What it does |
 |-------|-------------|
 | Null bytes | Strip `\x00` |
-| Invisibles | Strip zero-width, Unicode Tag block, bidi controls |
+| Invisibles | Strip zero-width, format/control, variation selectors, Unicode Tag block, bidi, C0/C1 |
 | NFKC | Normalize fullwidth ASCII to standard ASCII |
-| Homoglyphs | Replace Cyrillic/Greek lookalikes with Latin equivalents |
+| Homoglyphs | Replace Cyrillic/Greek/Armenian/Cherokee/typographic lookalikes with Latin equivalents |
 | Re-NFKC | Re-normalize after homoglyph replacement (ensures idempotency) |
 | **Escaper** | Pluggable — you choose what to escape for |
 
@@ -144,12 +152,6 @@ template.render(**safe_context)
 ```
 
 See [examples/](examples/) for runnable scripts covering LLM pipelines, FastAPI/Pydantic, and log sanitization.
-
-## Install
-
-```
-pip install navi-sanitize
-```
 
 ## Walk untrusted data structures
 
@@ -215,17 +217,17 @@ clean("pаypal.com")
 
 ## Performance
 
-Measured on Python 3.12, single thread. `clean()` is the per-string cost; `walk()` includes the iterative copy pass.
+Measured on Python 3.13, single thread, AMD Ryzen 9 9950X. `clean()` is the per-string cost; `walk()` includes the iterative copy pass. Numbers are representative — expect ±20% on different hardware; CI runners are typically 2–3x slower.
 
 | Scenario | Mean | Ops/sec |
 |----------|------|---------|
-| `clean()` — short, clean text (no-op) | 2.8 us | 358K |
-| `clean()` — short, hostile (all stages fire) | 67 us | 15K |
-| `clean()` — 13KB clean text | 810 us | 1.2K |
-| `clean()` — 10KB hostile text | 449 us | 2.2K |
-| `clean()` — 100KB hostile payload | 5.7 ms | 176 |
-| `walk()` — 100-item nested dict, clean | 537 us | 1.9K |
-| `walk()` — 100-item nested dict, hostile | 6.9 ms | 144 |
+| `clean()` — short, clean text (no-op) | 1.1 µs | 905K |
+| `clean()` — short, hostile (all stages fire) | 21 µs | 48K |
+| `clean()` — 13KB clean text | 292 µs | 3.4K |
+| `clean()` — 10KB hostile text | 305 µs | 3.3K |
+| `clean()` — 100KB hostile payload | 3.5 ms | 286 |
+| `walk()` — 100-item nested dict, clean | 311 µs | 3.2K |
+| `walk()` — 100-item nested dict, hostile | 2.5 ms | 408 |
 
 ## License
 

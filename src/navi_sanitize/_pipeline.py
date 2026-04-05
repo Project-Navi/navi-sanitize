@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import unicodedata
 from collections.abc import Callable
+from typing import cast
 
 from navi_sanitize._homoglyphs import HOMOGLYPH_MAP
 from navi_sanitize._invisible import INVISIBLE_RE
@@ -40,10 +41,23 @@ def _strip_invisible(s: str) -> tuple[str, int]:
     return s, 0
 
 
-def _normalize_nfkc(s: str) -> tuple[str, bool]:
-    """NFKC normalize. Returns (cleaned, changed)."""
+def _normalize_nfkc(s: str) -> tuple[str, int]:
+    """NFKC normalize. Returns (cleaned, approximate count of affected codepoints).
+
+    Count is derived from whole-string comparison: positions that differ
+    between original and normalized (up to shorter length) plus any length
+    change from composition or decomposition.  This avoids the per-character
+    normalization pitfall where combining-mark sequences (e.g. e + combining
+    acute) compose to a single precomposed codepoint but each constituent
+    appears unchanged when normalized in isolation.
+    """
     normalized = unicodedata.normalize("NFKC", s)
-    return normalized, normalized != s
+    if normalized == s:
+        return s, 0
+    min_len = min(len(s), len(normalized))
+    n = sum(1 for i in range(min_len) if s[i] != normalized[i])
+    n += abs(len(s) - len(normalized))
+    return normalized, n
 
 
 def _replace_homoglyphs(s: str) -> tuple[str, int]:
@@ -100,9 +114,9 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
         logger.warning("Stripped %d invisible character(s) from value", invis_count)
 
     # Stage 3: NFKC normalization
-    text, had_nfkc = _normalize_nfkc(text)
-    if had_nfkc:
-        logger.warning("Normalized fullwidth character(s) in value")
+    text, nfkc_count = _normalize_nfkc(text)
+    if nfkc_count:
+        logger.warning("Normalized %d fullwidth/compatibility character(s) in value", nfkc_count)
 
     # Stage 4: Homoglyphs
     text, glyph_count = _replace_homoglyphs(text)
@@ -143,7 +157,9 @@ def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) ->
 
     # Scalars and strings — no traversal needed
     if isinstance(data, str):
-        return clean(data, escaper=escaper)  # type: ignore[return-value]
+        # clean() returns str; T is str (or a subclass whose extra semantics
+        # sanitization intentionally discards).  Mypy can't prove str <: T.
+        return cast(T, clean(data, escaper=escaper))
     if not isinstance(data, (dict, list)):
         return data
 
@@ -216,4 +232,6 @@ def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) ->
             for item in orig_l:
                 copy_l.append(_resolve(item, depth))
 
-    return result  # type: ignore[return-value]
+    # result is the root copy (dict or list) — structurally T but typed as
+    # object because the stack-based builder can't carry T through.
+    return cast(T, result)

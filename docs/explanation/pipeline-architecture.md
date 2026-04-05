@@ -1,6 +1,6 @@
 # Pipeline Architecture
 
-Every string passed to `clean()` flows through six stages in strict order. Each stage is a deterministic function that returns the cleaned string and a change indicator (a count for stages that strip or replace, a boolean for normalization). The pipeline orchestrator logs warnings when stages modify input.
+Every string passed to `clean()` flows through six stages in strict order. Each of the five universal stages (1--5) is a deterministic function that returns the cleaned string and a change indicator (a count of affected codepoints). The escaper (stage 6, if provided) is a plain `str -> str` function. The pipeline orchestrator logs warnings when stages modify input.
 
 ## Data Flow
 
@@ -24,7 +24,7 @@ Input string
           │
           ▼
 ┌─────────────────────┐
-│ 4. Homoglyph Replace│  Cyrillic/Greek → Latin
+│ 4. Homoglyph Replace│  Cyrillic/Greek/Armenian/Cherokee/typographic → Latin
 └─────────┬───────────┘
           │
           ▼
