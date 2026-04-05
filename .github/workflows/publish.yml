@@ -69,4 +69,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
-        run: gh release upload "$TAG_NAME" dist/* sbom/* --clobber
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG_NAME" dist/* sbom/* --clobber --repo "$GH_REPO"
