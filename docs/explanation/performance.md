@@ -1,6 +1,6 @@
 # Performance
 
-Benchmarks measured on Python 3.12, single thread. Run via `uv run pytest tests/test_benchmark.py -v`.
+Benchmarks measured on Python 3.13, single thread, AMD Ryzen 9 9950X. Run via `uv run pytest tests/test_benchmark.py -v`. Numbers are representative --- expect ±20% on different hardware; CI runners are typically 2--3x slower.
 
 ## Benchmark Results
 
@@ -8,18 +8,18 @@ Benchmarks measured on Python 3.12, single thread. Run via `uv run pytest tests/
 
 | Scenario | Mean | Ops/sec | Description |
 |----------|------|---------|-------------|
-| Short, clean text (no-op) | 2.8 us | 358K | ~38 chars, no stages fire |
-| Short, hostile (all stages) | 67 us | 15K | ~27 chars with homoglyphs, null bytes, zero-width, template syntax |
-| 13KB clean text | 810 us | 1.2K | Large clean input throughput |
-| 10KB hostile text | 449 us | 2.2K | Large hostile input with repeated attack patterns |
-| 100KB hostile payload | 5.7 ms | 176 | Stress test payload |
+| Short, clean text (no-op) | 1.1 µs | 905K | ~38 chars, no stages fire |
+| Short, hostile (all stages) | 21 µs | 48K | ~27 chars with homoglyphs, null bytes, zero-width, template syntax |
+| 13KB clean text | 292 µs | 3.4K | Large clean input throughput |
+| 10KB hostile text | 305 µs | 3.3K | Large hostile input with repeated attack patterns |
+| 100KB hostile payload | 3.5 ms | 286 | Stress test payload |
 
 ### `walk()` --- Recursive Structure Cost
 
 | Scenario | Mean | Ops/sec | Description |
 |----------|------|---------|-------------|
-| 100-item nested dict, clean | 537 us | 1.9K | `deepcopy` + traversal overhead, no stages fire |
-| 100-item nested dict, hostile | 6.9 ms | 144 | `deepcopy` + full pipeline on every string |
+| 100-item nested dict, clean | 311 µs | 3.2K | Iterative copy + traversal overhead, no stages fire |
+| 100-item nested dict, hostile | 2.5 ms | 408 | Iterative copy + full pipeline on every string |
 
 ## When to Use `clean()` vs `walk()`
 
@@ -31,7 +31,7 @@ Benchmarks measured on Python 3.12, single thread. Run via `uv run pytest tests/
 | Nested config from untrusted source | `walk()` |
 | Hot path, single known string | `clean()` |
 
-`walk()` adds `deepcopy` overhead to ensure the original data is never modified. If you're already working with a copy or don't need immutability, you can call `clean()` on individual strings for better performance.
+`walk()` adds iterative copy overhead to ensure the original data is never modified. If you're already working with a copy or don't need immutability, you can call `clean()` on individual strings for better performance.
 
 ## Performance Characteristics by Stage
 

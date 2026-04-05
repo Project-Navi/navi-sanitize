@@ -6,9 +6,9 @@ hide:
 
 # navi-sanitize
 
-**Deterministic input sanitization for untrusted text.** Zero dependencies. No ML. Legitimate Unicode preserved by design.
+**Deterministic input sanitization for untrusted text** --- invisible characters, homoglyphs, and encoding tricks, handled before your code sees them. Zero dependencies, no ML. Legitimate Unicode preserved by design.
 
-navi-sanitize removes invisible attacks from untrusted text before it reaches your application. It doesn't detect attacks --- it removes them. Every input produces clean output, every time.
+navi-sanitize removes invisible attacks from untrusted text before it reaches your application. It doesn't detect attacks --- it removes them. Implements the pipeline recommended by the [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
 
 [Get Started](getting-started/quickstart.md){ .md-button .md-button--primary }
 [API Reference](reference/api.md){ .md-button }
@@ -28,8 +28,10 @@ clean(evil)         # "systemprompt" — hidden chars stripped
 ## Features
 
 - **6-stage pipeline** --- null bytes, invisible characters, NFKC normalization, homoglyph replacement, re-NFKC for idempotency, pluggable escaper
+- **OWASP aligned** --- implements the NFKC + zero-width + control character sanitization recommended by the LLM Prompt Injection Prevention Cheat Sheet
+- **Only maintained option** --- both [confusable_homoglyphs](https://github.com/vhf/confusable_homoglyphs) and [homoglyphs](https://github.com/life4/homoglyphs) are archived; navi-sanitize is the only maintained Python library covering homoglyph replacement
 - **Deterministic** --- same input always produces the same output; no probabilistic models, no heuristics
-- **Zero dependencies** --- Python 3.12+ stdlib only
+- **Zero dependencies** --- Python 3.12+ stdlib only; zero supply chain risk
 - **Pluggable escapers** --- built-in Jinja2 and path traversal escapers; write your own in three lines
 - **Recursive sanitization** --- `walk()` sanitizes every string in nested dicts and lists
 - **Transparent logging** --- warnings include counts ("Stripped 3 invisible character(s)")

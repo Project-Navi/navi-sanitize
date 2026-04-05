@@ -5,7 +5,9 @@ navi-sanitize is a deterministic text sanitization library. It transforms untrus
 ## Design Philosophy
 
 1. **Deterministic** --- same input, same output, every time. No ML models, no heuristics, no confidence scores.
-2. **Legitimate Unicode preserved** --- CJK, Arabic, Hebrew, emoji, and non-confusable text pass through unchanged. A string that passes through unmodified was already clean.
+2. **Legitimate Unicode preserved** --- CJK, Arabic, Hebrew, emoji,¹ and non-confusable text pass through unchanged. A string that passes through unmodified was already clean.
+
+¹ ZWJ (U+200D) is stripped as a zero-width character, decomposing ZWJ emoji sequences into individual emoji. Bidi formatting marks (U+061C, U+200E/F, etc.) are also stripped — see [Stripping Arabic Letter Mark](#stripping-arabic-letter-mark-and-mongolian-fvs) below.
 3. **Always returns output** --- never throws on bad input (except `TypeError` for non-strings). Attackers can't cause denial of service by crafting inputs that error.
 4. **Pluggable** --- the universal pipeline handles common vectors; escapers handle context-specific threats.
 
@@ -117,7 +119,7 @@ re-inserts them from a trusted source.
 
 Characters like ᴀᴅᴍɪɴ (Latin Small Capitals, U+1D00--U+1D22) and ɑ (Latin Small Letter Alpha,
 U+0251) are visually similar to standard Latin letters but are classified as Latin script by
-Unicode. The homoglyph map targets cross-script confusables (Cyrillic, Greek, Armenian, Cherokee)
+Unicode. The homoglyph map targets cross-script confusables (Cyrillic, Greek, Armenian, Cherokee, Latin Extended, and typographic)
 where the script mismatch is the attack signal. Latin-to-Latin visual similarity is a different
 threat model better served by `detect_scripts()` and `is_mixed_script()` --- or by application-level
 character allowlisting for high-security contexts like username registration.

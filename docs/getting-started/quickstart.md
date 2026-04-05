@@ -114,7 +114,7 @@ clean("pаypal.com")
 Warnings include counts for traceability:
 - `"Removed 2 null byte(s) from value"`
 - `"Stripped 3 invisible character(s) from value"`
-- `"Normalized fullwidth character(s) in value"`
+- `"Normalized {N} fullwidth/compatibility character(s) in value"`
 - `"Replaced 1 homoglyph(s) in value"`
 
 To capture warnings programmatically:

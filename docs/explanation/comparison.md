@@ -23,7 +23,9 @@ navi-sanitize is the only library that combines invisible character stripping, h
 
 **Why they're different:** Transliteration destroys content. Unidecode turns Chinese characters into pinyin, Cyrillic sentences into romanized gibberish, and Arabic into Latin approximations. It's designed for slug generation, not security.
 
-navi-sanitize normalizes only the 66 highest-risk Latin lookalikes and leaves legitimate Unicode intact. CJK, Arabic, emoji, and non-confusable Cyrillic pass through unchanged.
+navi-sanitize normalizes only the 66 highest-risk Latin lookalikes and leaves legitimate Unicode intact. CJK, Arabic, emoji,¹ and non-confusable Cyrillic pass through unchanged.
+
+¹ ZWJ (U+200D) is stripped as a zero-width character, which decomposes ZWJ emoji sequences (e.g. family emoji) into individual emoji. Single emoji are unaffected.
 
 | Input | navi-sanitize | Unidecode |
 |-------|--------------|-----------|
@@ -118,7 +120,7 @@ class UserInput(BaseModel):
 The Unicode Consortium's `Confusables.txt` contains thousands of pairs across many scripts. navi-sanitize uses a curated 66-pair subset focused on:
 
 1. **Highest visual similarity** --- characters that are pixel-identical in common fonts
-2. **Most commonly weaponized** --- Cyrillic/Greek-to-Latin pairs used in phishing and filter bypass
+2. **Most commonly weaponized** --- Cyrillic/Greek/Armenian/Cherokee/typographic-to-Latin pairs used in phishing and filter bypass
 3. **Typographic normalization** --- smart quotes, em/en dashes, minus signs
 
 This preserves legitimate Unicode while covering the attack surface that matters in practice.
