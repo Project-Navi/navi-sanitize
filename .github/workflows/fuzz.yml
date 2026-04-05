@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [fuzz_clean]
+        target: [fuzz_clean, fuzz_walk]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
@@ -35,7 +35,7 @@ jobs:
         env:
           FUZZ_TARGET: ${{ matrix.target }}
         run: |
-          uv run python "fuzz/${FUZZ_TARGET}.py" -atheris_runs=100000 -max_len=4096
+          uv run python fuzz/fuzz_clean.py --target="${FUZZ_TARGET}" -atheris_runs=100000 -max_len=4096
       - name: Upload crash artifacts
         if: failure()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
