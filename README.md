@@ -215,7 +215,7 @@ clean("pаypal.com")
 
 ## Performance
 
-Measured on Python 3.12, single thread. `clean()` is the per-string cost; `walk()` includes `deepcopy`.
+Measured on Python 3.12, single thread. `clean()` is the per-string cost; `walk()` includes the iterative copy pass.
 
 | Scenario | Mean | Ops/sec |
 |----------|------|---------|

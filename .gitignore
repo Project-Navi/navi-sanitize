@@ -6,6 +6,7 @@ dist/
 build/
 .pytest_cache/
 .mypy_cache/
+.hypothesis/
 .ruff_cache/
 .coverage
 .dev.vars
@@ -20,6 +21,7 @@ coverage.xml
 
 # Internal docs — operational docs not for public tracking
 docs/internal/
+docs/plans/
 
 # Zensical build output
 site/
