@@ -74,7 +74,7 @@ Six stages in strict order — reordering breaks security:
 5. **Re-NFKC** (conditional) — re-normalize after homoglyph replacement to ensure idempotency
 6. **Escaper** (optional) — pluggable `Callable[[str], str]` runs last
 
-Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effects — the orchestrator logs.
+Each stage returns `(cleaned_string, count_or_flag)` — either an `int` count of removals/replacements or a `bool` changed flag. Stages have no side effects — the orchestrator logs.
 
 ### Data files
 
