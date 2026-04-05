@@ -98,6 +98,15 @@ class TestNFKCNormalization:
             clean("\uff41bc")  # 1 fullwidth char
         assert "1 fullwidth/compatibility" in caplog.text
 
+    def test_re_nfkc_fires_after_homoglyph_replacement(self) -> None:
+        """Stage 5 re-NFKC: Greek U+03A5 + combining tilde -> Y + tilde -> U+1EF8."""
+        from navi_sanitize import clean
+
+        # Greek U+03A5 is replaced with Latin Y by stage 4.
+        # Y + combining tilde (U+0303) then composes to U+1EF8 in stage 5.
+        result = clean("\u03a5\u0303")
+        assert result == "\u1ef8"
+
 
 class TestHomoglyphReplacement:
     def test_replaces_cyrillic_a(self) -> None:
