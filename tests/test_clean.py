@@ -84,6 +84,20 @@ class TestNFKCNormalization:
             clean("\uff54est")
         assert "fullwidth" in caplog.text.lower() or "normalized" in caplog.text.lower()
 
+    def test_warns_with_nfkc_count(self, caplog: pytest.LogCaptureFixture) -> None:
+        from navi_sanitize import clean
+
+        with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
+            clean("\uff41\uff42\uff43")  # 3 fullwidth chars
+        assert "3 fullwidth/compatibility" in caplog.text
+
+    def test_warns_with_single_nfkc_count(self, caplog: pytest.LogCaptureFixture) -> None:
+        from navi_sanitize import clean
+
+        with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
+            clean("\uff41bc")  # 1 fullwidth char
+        assert "1 fullwidth/compatibility" in caplog.text
+
 
 class TestHomoglyphReplacement:
     def test_replaces_cyrillic_a(self) -> None:

@@ -41,13 +41,29 @@ def _strip_invisible(s: str) -> tuple[str, int]:
     return s, 0
 
 
-def _normalize_nfkc(s: str) -> tuple[str, int]:
-    """NFKC normalize. Returns (cleaned, count of changed codepoints)."""
+def _normalize_nfkc(s: str, *, count: bool = True) -> tuple[str, int]:
+    """NFKC normalize. Returns (cleaned, approximate count of affected codepoints).
+
+    When *count* is False the second element is always 0 or 1 (changed flag
+    only), skipping the O(n) diff — used by the stage-5 re-NFKC path where
+    the count is discarded.
+
+    Count is derived from whole-string comparison: positions that differ
+    between original and normalized (up to shorter length) plus any length
+    change from composition or decomposition.  This avoids the per-character
+    normalization pitfall where combining-mark sequences (e.g. e + combining
+    acute) compose to a single precomposed codepoint but each constituent
+    appears unchanged when normalized in isolation.
+    """
     normalized = unicodedata.normalize("NFKC", s)
     if normalized == s:
         return s, 0
-    count = sum(1 for c in s if unicodedata.normalize("NFKC", c) != c)
-    return normalized, max(count, 1)  # at least 1 if string changed
+    if not count:
+        return normalized, 1  # changed flag only
+    min_len = min(len(s), len(normalized))
+    n = sum(1 for i in range(min_len) if s[i] != normalized[i])
+    n += abs(len(s) - len(normalized))
+    return normalized, max(n, 1)  # at least 1 if string changed
 
 
 def _replace_homoglyphs(s: str) -> tuple[str, int]:
@@ -115,7 +131,7 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
         # Stage 5: Re-NFKC — homoglyph replacement can produce Latin chars that
         # combine with adjacent combining marks (e.g. Greek U+03A5 + combining
         # tilde -> Latin Y + combining tilde -> NFKC composes to U+1EF8).
-        text, _ = _normalize_nfkc(text)
+        text, _ = _normalize_nfkc(text, count=False)
 
     # Stage 6: Escaper
     if escaper is not None:

@@ -31,7 +31,7 @@ clean(evil)         # "systemprompt" — hidden chars stripped
 - **OWASP aligned** --- implements the NFKC + zero-width + control character sanitization recommended by the LLM Prompt Injection Prevention Cheat Sheet
 - **Only maintained option** --- both [confusable_homoglyphs](https://github.com/vhf/confusable_homoglyphs) and [homoglyphs](https://github.com/life4/homoglyphs) are archived; navi-sanitize is the only maintained Python library covering homoglyph replacement
 - **Deterministic** --- same input always produces the same output; no probabilistic models, no heuristics
-- **Zero dependencies** --- Python 3.12+ stdlib only; zero supply chain risk
+- **Zero dependencies** --- Python 3.12+ stdlib only; no third-party dependency risk
 - **Pluggable escapers** --- built-in Jinja2 and path traversal escapers; write your own in three lines
 - **Recursive sanitization** --- `walk()` sanitizes every string in nested dicts and lists
 - **Transparent logging** --- warnings include counts ("Stripped 3 invisible character(s)")
