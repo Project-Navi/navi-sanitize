@@ -68,11 +68,11 @@ Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None, max_depth=12
 |-----------|------|---------|-------------|
 | `data` | `T` | *(required)* | Any Python object; strings within dicts/lists are sanitized |
 | `escaper` | `Escaper \| None` | `None` | Optional escaper function applied to each string |
-| `max_depth` | `int` | `128` | Maximum nesting depth of containers; raises `ValueError` if exceeded |
+| `max_depth` | `int` | `128` | Maximum nesting depth of containers; logs a warning and continues if exceeded. `ValueError` if negative |
 
 **Returns:** `T` --- a deep copy of the input with all strings sanitized.
 
-**Raises:** `ValueError` --- if nesting depth reaches `max_depth`, if the input contains a reference cycle, or if `max_depth` is negative.
+**Raises:** `ValueError` --- if `max_depth` is negative.
 
 **Behavior by type:**
 
@@ -81,10 +81,10 @@ Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None, max_depth=12
 | `str` | Passed through `clean()` |
 | `dict` | Both keys and values sanitized recursively |
 | `list` | Elements sanitized recursively |
-| `tuple`, `set`, `frozenset` | Passed through unchanged, but counted for depth |
+| `tuple`, `set`, `frozenset` | Passed through by reference, not traversed |
 | `bytes`, `int`, `float`, `bool`, `None` | Passed through unchanged |
 
-The original data is **never modified** --- `walk()` operates on a `deepcopy`. A depth check runs before `deepcopy` to prevent resource exhaustion from hostile nesting.
+The original data is **never modified** --- `walk()` uses a single iterative copy-and-sanitize pass (no recursion, no `deepcopy`). Each container is copied exactly once; cyclic references are handled via identity tracking.
 
 **Examples:**
 
@@ -109,8 +109,8 @@ walk(42)            # 42
 # Custom depth limit
 walk(deep_structure, max_depth=256)
 
-# ValueError on excessive nesting
-walk(hostile_json)  # ValueError: walk() input exceeds max_depth=128
+# Warning on excessive nesting (continues sanitizing)
+walk(hostile_json)  # logs: "walk() input exceeds max_depth=128; continuing to sanitize"
 ```
 
 ---

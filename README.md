@@ -160,7 +160,7 @@ from navi_sanitize import walk
 spec = walk(untrusted_json)
 ```
 
-`walk()` limits nesting depth to 128 by default. Pass `max_depth=` for deeper structures.
+`walk()` warns when nesting exceeds 128 levels by default; pass `max_depth=` to adjust. Traverses dicts and lists only — tuples and sets pass through by reference.
 
 ## Opt-in Utilities
 

@@ -356,8 +356,8 @@ class TestLoggingEdgeCases:
 
 
 class TestRecursionLimits:
-    def test_recursion_beyond_python_limit(self) -> None:
-        """Iterative walker handles depth beyond Python's recursion limit."""
+    def test_deep_nesting_without_recursion(self) -> None:
+        """Deep nesting is handled iteratively — no RecursionError possible."""
         depth = min(sys.getrecursionlimit() // 4, 250)
         data: object = "n\u0430vi"
         for _ in range(depth):

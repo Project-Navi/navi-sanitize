@@ -94,7 +94,7 @@ Each stage returns `(cleaned_string, changed: bool)`. Stages have no side effect
 - **Test oracle:** for inputs covered by navi-bootstrap's adversarial suite, `clean(text, escaper=jinja2_escaper)` must match navi-bootstrap's `_sanitize_string(text, escape_jinja=True)` exactly
 - **Warnings include counts:** `"Stripped 3 invisible character(s)"` not `"Stripped invisible character(s)"`
 - **`NullHandler` on library logger** — app configures handlers, not the library
-- **`walk()` uses `deepcopy`** — original data never modified; PEP 695 `def walk[T]()` for return type; default `max_depth=128` with iterative pre-scan before deepcopy; escaper output is NOT re-sanitized (trust boundary)
+- **`walk()` is non-mutating** — original data never modified; PEP 695 `def walk[T]()` for return type; default `max_depth=128`; performs a single iterative copy-and-sanitize pass; escaper output is NOT re-sanitized (trust boundary)
 - **No remote push** without explicit approval — local only until told otherwise
 
 ## Gotchas
