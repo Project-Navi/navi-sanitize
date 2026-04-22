@@ -55,9 +55,9 @@ _HOSTILE_ALPHABET = (
     "../../"
 )
 
-hostile_text = st.text(alphabet=_HOSTILE_ALPHABET, min_size=0, max_size=200)
-unicode_text = st.text(min_size=0, max_size=200)
-safe_text = st.text(
+HOSTILE_TEXT = st.text(alphabet=_HOSTILE_ALPHABET, min_size=0, max_size=200)
+UNICODE_TEXT = st.text(min_size=0, max_size=200)
+SAFE_TEXT = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789 .-_",
     min_size=0,
     max_size=100,
@@ -86,7 +86,7 @@ def _nested_structure(leaf: st.SearchStrategy[object]) -> st.SearchStrategy[obje
 
 walk_structure = _nested_structure(
     st.one_of(
-        hostile_text,
+        HOSTILE_TEXT,
         st.integers(min_value=-1000, max_value=1000),
         st.none(),
         st.booleans(),
@@ -129,41 +129,41 @@ def _collect_leaf_strings(data: object) -> list[str]:
 class TestCleanProperties:
     """Property-based tests for clean() invariants."""
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_always_returns_str(self, text: str) -> None:
         assert isinstance(clean(text), str)
 
-    @given(text=hostile_text)
+    @given(text=HOSTILE_TEXT)
     @settings(max_examples=50)
     def test_no_null_bytes(self, text: str) -> None:
         assert "\x00" not in clean(text)
 
-    @given(text=hostile_text)
+    @given(text=HOSTILE_TEXT)
     @settings(max_examples=50)
     def test_no_invisible_characters(self, text: str) -> None:
         assert not INVISIBLE_RE.search(clean(text))
 
-    @given(text=hostile_text)
+    @given(text=HOSTILE_TEXT)
     @settings(max_examples=50)
     def test_no_homoglyphs(self, text: str) -> None:
         result = clean(text)
         remaining = set(result) & set(HOMOGLYPH_MAP)
         assert not remaining, f"Homoglyphs remain: {remaining!r}"
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_nfkc_stable(self, text: str) -> None:
         result = clean(text)
         assert unicodedata.normalize("NFKC", result) == result
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_idempotent(self, text: str) -> None:
         first = clean(text)
         assert clean(first) == first
 
-    @given(text=hostile_text)
+    @given(text=HOSTILE_TEXT)
     @settings(max_examples=50)
     def test_idempotent_hostile(self, text: str) -> None:
         first = clean(text)
@@ -220,7 +220,14 @@ class TestWalkProperties:
         a: dict[str, object] = {"val": "hello"}
         a["self"] = a
         result = walk(a)
-        assert result["val"] == "hello"
+        leaf = result["val"]
+        assert leaf == "hello"
+        # Leaf strings in cyclic structures should still satisfy clean() invariants.
+        assert "\x00" not in leaf
+        assert not INVISIBLE_RE.search(leaf)
+        remaining = set(leaf) & set(HOMOGLYPH_MAP)
+        assert not remaining, f"Homoglyph in walk output: {remaining!r}"
+        assert unicodedata.normalize("NFKC", leaf) == leaf
         assert result["self"] is result
 
 
@@ -232,17 +239,17 @@ class TestWalkProperties:
 class TestScriptDetectionProperties:
     """Property-based tests for script detection."""
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_returns_subset_of_known_scripts(self, text: str) -> None:
         assert detect_scripts(text) <= KNOWN_SCRIPTS
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_is_mixed_consistent(self, text: str) -> None:
         assert is_mixed_script(text) == (len(detect_scripts(text)) >= 2)
 
-    @given(text=safe_text)
+    @given(text=SAFE_TEXT)
     @settings(max_examples=50)
     def test_ascii_never_mixed(self, text: str) -> None:
         assert not is_mixed_script(text)
@@ -256,13 +263,13 @@ class TestScriptDetectionProperties:
 class TestJinja2EscaperProperties:
     """Property-based tests for jinja2_escaper."""
 
-    @given(text=hostile_text)
+    @given(text=HOSTILE_TEXT)
     @settings(max_examples=50)
     def test_no_raw_delimiters(self, text: str) -> None:
         result = jinja2_escaper(text)
         assert not _JINJA2_DELIMITERS_RE.search(result)
 
-    @given(text=safe_text)
+    @given(text=SAFE_TEXT)
     @settings(max_examples=50)
     def test_safe_text_unchanged(self, text: str) -> None:
         if not _JINJA2_DELIMITERS_RE.search(text):
@@ -308,13 +315,13 @@ class TestPathEscaperProperties:
 class TestDecodeEvasionProperties:
     """Property-based tests for decode_evasion."""
 
-    @given(text=unicode_text)
+    @given(text=UNICODE_TEXT)
     @settings(max_examples=50)
     def test_never_raises(self, text: str) -> None:
         result = decode_evasion(text)
         assert isinstance(result, str)
 
-    @given(text=safe_text)
+    @given(text=SAFE_TEXT)
     @settings(max_examples=50)
     def test_clean_text_unchanged(self, text: str) -> None:
         if "%" not in text and "\\" not in text and "&" not in text:

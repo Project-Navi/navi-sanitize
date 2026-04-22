@@ -246,6 +246,7 @@ class TestWalkDepthLimit:
 
         data = {"key": ("n\u0430vi",)}
         result = walk(data, max_depth=10)
+        assert result is not data
         assert result["key"] == ("n\u0430vi",)
 
     def test_never_crashes_on_any_depth(self) -> None:
@@ -338,8 +339,13 @@ class TestWalkDepthLimit:
             "\x00key": {"inner\u200b": ["\u0430", "\x00"]},
         }
         result = walk(data)
+        # Sanitized keys must exist
         assert "name" in result
         assert result["name"] == "value"
         assert "key" in result
         assert "inner" in result["key"]
         assert result["key"]["inner"] == ["a", ""]
+        # Original hostile keys must be completely removed
+        assert "n\u0430me" not in result
+        assert "\x00key" not in result
+        assert "inner\u200b" not in result["key"]
