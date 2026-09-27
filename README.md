@@ -1,7 +1,6 @@
 # navi-sanitize
 
 [![Tests](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/Project-Navi/navi-sanitize/actions/workflows/codeql.yml/badge.svg)](https://github.com/Project-Navi/navi-sanitize/actions/workflows/codeql.yml)
 [![codecov](https://codecov.io/gh/Project-Navi/navi-sanitize/graph/badge.svg?token=9Vr26NV2Fn)](https://codecov.io/gh/Project-Navi/navi-sanitize)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Project-Navi/navi-sanitize/badge)](https://scorecard.dev/viewer/?uri=github.com/Project-Navi/navi-sanitize)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
