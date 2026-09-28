@@ -3,11 +3,26 @@
 
 from __future__ import annotations
 
+import html
 import logging
+import re
+import urllib.parse
 
+import hypothesis.strategies as st
 import pytest
+from hypothesis import given, settings
 
 from navi_sanitize import clean, decode_evasion, path_escaper
+
+_HEX_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
+
+
+def _legacy_decode_pass(s: str) -> str:
+    """One pass of the pre-0.2.2 decoder, as an oracle for surrogate-free text."""
+    text = urllib.parse.unquote_to_bytes(s).decode("utf-8", errors="surrogateescape")
+    text = "".join(f"%{ord(ch) & 0xFF:02X}" if "\udc80" <= ch <= "\udcff" else ch for ch in text)
+    text = html.unescape(text)
+    return _HEX_RE.sub(lambda m: chr(int(m.group(1), 16)), text)
 
 
 class TestDecodeSingleLayer:
@@ -126,6 +141,61 @@ class TestDecodeInvalidEncoding:
     def test_mixed_valid_and_malformed(self) -> None:
         """Valid sequences decode, malformed ones stay as percent-encoded."""
         assert decode_evasion("%C3%A9%FF") == "é%FF"
+
+    def test_encoded_surrogate_bytes_preserved(self) -> None:
+        """UTF-8-encoded surrogates are invalid UTF-8 and stay percent text."""
+        assert decode_evasion("%ED%A0%80") == "%ED%A0%80"
+
+
+class TestDecodeLiteralSurrogates:
+    """Literal lone surrogates are preserved, never encoded or replaced (NS-02)."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("\ud800", "\ud800"),
+            ("\udbff\udc00x", "\udbff\udc00x"),
+            ("pre\udfffpost", "pre\udfffpost"),
+            ("\udc80", "\udc80"),  # the surrogateescape range is not special in input
+            ("\udcff%41", "\udcffA"),
+            ("%41\ud800&#66;", "A\ud800B"),
+            ("%FF\udc80", "%FF\udc80"),
+            ("%C3%A9\ud800%C3", "é\ud800%C3"),
+            ("%C3\udc80%A9", "%C3\udc80%A9"),  # a literal splits an encoded sequence
+            ("\ud800%252e%252e%252f", "\ud800../"),
+        ],
+    )
+    def test_surrogates_preserved_while_decoding(self, text: str, expected: str) -> None:
+        assert decode_evasion(text) == expected
+
+    def test_surrogate_input_log_is_content_free(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.DEBUG, logger="navi_sanitize"):
+            decode_evasion("SECRET\ud800%53ECRET")
+        assert caplog.records
+        for record in caplog.records:
+            assert "SECRET" not in record.getMessage()
+            assert "SECRET" not in repr(record.args)
+
+    @given(text=st.text(st.characters(exclude_categories=()), max_size=60))
+    @settings(max_examples=200)
+    def test_never_raises_on_any_code_point(self, text: str) -> None:
+        assert isinstance(decode_evasion(text), str)
+
+    @given(
+        text=st.lists(
+            st.sampled_from(["%", "C3", "A9", "E2", "82", "AC", "FF", "80", "2", "&#", ";", "é"])
+            | st.characters(codec="utf-8"),
+            max_size=40,
+        ).map("".join)
+    )
+    @settings(max_examples=300)
+    def test_matches_legacy_decoder_without_surrogates(self, text: str) -> None:
+        """Only literal surrogates change behavior; everything else decodes as before."""
+        assert decode_evasion(text, max_layers=1) == _legacy_decode_pass(text)
+
+    def test_non_str_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="decode_evasion\\(\\) requires str"):
+            decode_evasion(b"%41")  # type: ignore[arg-type]
 
 
 class TestDecodeLogging:

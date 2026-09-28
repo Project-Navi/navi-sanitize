@@ -17,13 +17,22 @@ from __future__ import annotations
 import html
 import logging
 import re
-import urllib.parse
 
 logger = logging.getLogger("navi_sanitize")
 
 MAX_DECODE_LAYERS: int = 3
 
 _HEX_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
+_PERCENT_RUN_RE = re.compile(r"(?:%[0-9a-fA-F]{2})+")
+
+
+def _decode_percent_run(m: re.Match[str]) -> str:
+    """Decode one run of consecutive ``%XX`` escapes."""
+    raw = bytes.fromhex(m.group().replace("%", ""))
+    # Decode valid UTF-8; map invalid bytes to surrogates so we can
+    # re-encode them back to %XX in the next step.
+    text = raw.decode("utf-8", errors="surrogateescape")
+    return "".join(f"%{ord(ch) & 0xFF:02X}" if "\udc80" <= ch <= "\udcff" else ch for ch in text)
 
 
 def _decode_url(s: str) -> str:
@@ -32,20 +41,12 @@ def _decode_url(s: str) -> str:
     Valid UTF-8 percent-encoded sequences decode normally.
     Invalid byte sequences (e.g. ``%FF``, lone ``%80``) are kept
     as literal percent-encoded text instead of being replaced with
-    U+FFFD.
+    U+FFFD. Only ``%XX`` runs are converted, so literal text (including
+    lone surrogates, which cannot be UTF-8 encoded) passes through as-is.
+    A literal character always ends a run: its UTF-8 form never begins
+    with a continuation byte, so it cannot complete an encoded sequence.
     """
-    raw = urllib.parse.unquote_to_bytes(s)
-    # Decode valid UTF-8; map invalid bytes to surrogates so we can
-    # re-encode them back to %XX in the next step.
-    text = raw.decode("utf-8", errors="surrogateescape")
-    # Re-encode any lone surrogates (from invalid bytes) back to %XX
-    parts: list[str] = []
-    for ch in text:
-        if "\udc80" <= ch <= "\udcff":
-            parts.append(f"%{ord(ch) & 0xFF:02X}")
-        else:
-            parts.append(ch)
-    return "".join(parts)
+    return _PERCENT_RUN_RE.sub(_decode_percent_run, s)
 
 
 def _decode_html_entities(s: str) -> str:
@@ -74,8 +75,10 @@ def decode_evasion(text: str, *, max_layers: int = MAX_DECODE_LAYERS) -> str:
     includes decoded content in log messages.
 
     Never errors on invalid or partial encodings — they pass through
-    unchanged.
+    unchanged. Raises ``TypeError`` if *text* is not a ``str``.
     """
+    if not isinstance(text, str):
+        raise TypeError(f"decode_evasion() requires str, got {type(text).__name__}")
     if max_layers <= 0:
         return text
 
