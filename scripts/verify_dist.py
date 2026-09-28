@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import sysconfig
@@ -249,11 +250,15 @@ def _run(cmd: list[str], cwd: Path) -> str:
 def install_and_smoke(wheel: Path, workdir: Path, version: str) -> dict[str, str]:
     """Install the wheel alone into a fresh venv and run the smoke checks there."""
     venv = workdir / "venv"
-    _run([sys.executable, "-m", "venv", str(venv)], workdir)
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    _run(
-        [str(python), "-m", "pip", "install", "--no-index", "--no-deps", "-q", str(wheel)], workdir
-    )
+    uv = shutil.which("uv")
+    if uv:  # works even where the interpreter lacks ensurepip (e.g. Debian system Python)
+        _run([sys.executable, "-m", "venv", "--without-pip", str(venv)], workdir)
+        install = [uv, "pip", "install", "--python", str(python), "--quiet"]
+    else:
+        _run([sys.executable, "-m", "venv", str(venv)], workdir)
+        install = [str(python), "-m", "pip", "install", "-q"]
+    _run([*install, "--no-index", "--no-deps", str(wheel)], workdir)
     out = _run([str(python), "-I", str(Path(__file__).resolve()), "--smoke", version], workdir)
     result: dict[str, str] = json.loads(out)
     return result
