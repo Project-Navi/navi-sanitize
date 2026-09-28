@@ -431,6 +431,28 @@ class TestWalkKeyCollisions:
         assert len(records) == 1
         assert records[0].args == (2,)
 
+    def test_collision_check_adds_no_key_lookups(self) -> None:
+        """Counting collisions must not hash or compare keys beyond the copy itself."""
+        from navi_sanitize import walk
+
+        class Probe:
+            hashes = 0
+
+            def __hash__(self) -> int:
+                Probe.hashes += 1
+                return 7
+
+            def __eq__(self, other: object) -> bool:
+                return self is other
+
+        k1, k2 = Probe(), Probe()
+        data = {k1: "a", k2: "b"}
+        Probe.hashes = 0
+        result = walk(data)
+        assert Probe.hashes == 2  # one insertion per key, as before collision counting
+        assert list(result) == [k1, k2]
+        assert list(result.values()) == ["a", "b"]
+
 
 class TestWalkDepthSemantics:
     """max_depth is an advisory threshold on first-discovery depth."""
