@@ -6,13 +6,12 @@ on:
     paths:
       - "docs/**"
       - "zensical.toml"
+      - "scripts/build_docs.py"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -27,12 +26,10 @@ jobs:
         with:
           enable-cache: true
       - name: Install docs dependencies
-        # For library repos, remove --no-install-project so the package is importable
         run: uv sync --frozen --group docs
-      - name: Build site
-        run: uv run zensical build
-      - name: Strip internal docs from build
-        run: rm -rf site/internal site/plans site/whitepaper
+      - name: Build and check site
+        # Internal material is excluded before generation, not deleted afterwards.
+        run: uv run python scripts/build_docs.py --out site
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: site
@@ -40,6 +37,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
