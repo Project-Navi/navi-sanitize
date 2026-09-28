@@ -5,7 +5,7 @@
 name = "navi-sanitize"
 site_name = "navi-sanitize"
 description = "Deterministic input sanitization for untrusted text"
-site_url = "https://project-navi.github.io/navi-sanitize"
+site_url = "https://docs.projectnavi.ai/navi-sanitize"
 repo_url = "https://github.com/Project-Navi/navi-sanitize"
 repo_name = "Project-Navi/navi-sanitize"
 copyright = "Copyright 2025-2026 Nelson Spence"
