@@ -65,6 +65,8 @@ safe_text = st.text(
 
 # Jinja2 delimiter regex (matches raw, unescaped delimiters)
 _JINJA2_DELIMITERS_RE = re.compile(r"\{{2,}|\}{2,}|\{%|%\}|\{#|#\}")
+# Any adjacent default-delimiter pair, including ones touching an escaped character
+_JINJA2_RAW_RE = re.compile(r"\{\{|\}\}|\{%|%\}|\{#|#\}")
 
 
 def _nested_structure(leaf: st.SearchStrategy[object]) -> st.SearchStrategy[object]:
@@ -169,6 +171,21 @@ class TestCleanProperties:
         first = clean(text)
         assert clean(first) == first
 
+    @given(text=st.text(st.characters(exclude_categories=()), max_size=100))
+    @settings(max_examples=100)
+    def test_handles_lone_surrogates(self, text: str) -> None:
+        """Default text strategies exclude surrogates; include them explicitly."""
+        first = clean(text)
+        assert isinstance(first, str)
+        assert clean(first) == first
+
+    @given(text=hostile_text)
+    @settings(max_examples=100)
+    def test_idempotent_with_builtin_escapers(self, text: str) -> None:
+        for escaper in (jinja2_escaper, path_escaper):
+            first = clean(text, escaper=escaper)
+            assert clean(first, escaper=escaper) == first
+
 
 # ---------------------------------------------------------------------------
 # walk() invariants
@@ -260,7 +277,8 @@ class TestJinja2EscaperProperties:
     @settings(max_examples=50)
     def test_no_raw_delimiters(self, text: str) -> None:
         result = jinja2_escaper(text)
-        assert not _JINJA2_DELIMITERS_RE.search(result)
+        assert not _JINJA2_RAW_RE.search(result)
+        assert jinja2_escaper(result) == result
 
     @given(text=safe_text)
     @settings(max_examples=50)
@@ -285,8 +303,12 @@ class TestPathEscaperProperties:
     @given(text=st.text(alphabet="abcdef/\\.0123456789", min_size=0, max_size=100))
     @settings(max_examples=50)
     def test_no_dotdot_segments(self, text: str) -> None:
-        segments = path_escaper(text).split("/")
-        assert ".." not in segments
+        result = path_escaper(text)
+        if result:
+            segments = result.split("/")
+            assert ".." not in segments
+            assert "." not in segments
+            assert "" not in segments
 
     @given(text=st.text(alphabet="abcdef/\\.0123456789", min_size=0, max_size=100))
     @settings(max_examples=50)
