@@ -63,7 +63,7 @@ class TestJinja2Escaper:
         ],
     )
     def test_overlapping_delimiters_fully_escaped(self, text: str, expected: str) -> None:
-        """A delimiter overlapping an escaped run must not survive (NS-09)."""
+        """A delimiter overlapping an escaped run must not survive."""
         from navi_sanitize import jinja2_escaper
 
         result = jinja2_escaper(text)
@@ -132,7 +132,7 @@ class TestPathEscaper:
     def test_embedded_dotdot_removal_cannot_leave_dot_segment(
         self, text: str, expected: str
     ) -> None:
-        """Deleting '..' inside a segment must not create a new '.' segment (NS-01)."""
+        """Deleting '..' inside a segment must not create a new '.' segment."""
         from navi_sanitize import clean, path_escaper
 
         assert path_escaper(text) == expected

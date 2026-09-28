@@ -148,7 +148,7 @@ class TestDecodeInvalidEncoding:
 
 
 class TestDecodeLiteralSurrogates:
-    """Literal lone surrogates are preserved, never encoded or replaced (NS-02)."""
+    """Literal lone surrogates are preserved, never encoded or replaced."""
 
     @pytest.mark.parametrize(
         ("text", "expected"),

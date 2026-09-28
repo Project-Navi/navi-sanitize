@@ -350,7 +350,7 @@ def _collision_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogReco
 
 
 class TestWalkKeyCollisions:
-    """Distinct keys that sanitize to the same key: last value wins, with a warning (NS-03)."""
+    """Distinct keys that sanitize to the same key: last value wins, with a warning."""
 
     def test_homoglyph_collision_keeps_last_value_and_warns(
         self, caplog: pytest.LogCaptureFixture
@@ -433,7 +433,7 @@ class TestWalkKeyCollisions:
 
 
 class TestWalkDepthSemantics:
-    """max_depth is an advisory threshold on first-discovery depth (NS-05)."""
+    """max_depth is an advisory threshold on first-discovery depth."""
 
     def test_threshold_counts_from_zero_at_top_level(
         self, caplog: pytest.LogCaptureFixture
