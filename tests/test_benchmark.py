@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pytest_benchmark.fixture import BenchmarkFixture
 
-from navi_sanitize import clean, jinja2_escaper, walk
+from navi_sanitize import clean, decode_evasion, jinja2_escaper, path_escaper, walk
 
 # --- Test data ---
 
@@ -25,6 +25,11 @@ NESTED_CLEAN = {
         {"name": f"user_{i}", "email": f"user_{i}@example.com", "active": True} for i in range(100)
     ]
 }
+
+ENCODED_SHORT = "%252e%252e%252fetc%252fpasswd"
+ENCODED_LONG = "%2e%2e%2f&lt;x&gt;\\x41 plain text " * 400  # ~12KB, mixed encodings
+BRACES_LONG = "{{% x %}} {#}} {{{ " * 600  # ~11KB, overlapping delimiters
+PATH_LONG = "a/.../b/../c/./d/" * 600  # ~10KB
 
 NESTED_HOSTILE = {
     "users": [
@@ -76,3 +81,24 @@ class TestWalkBenchmarks:
     def test_walk_nested_hostile(self, benchmark: BenchmarkFixture) -> None:
         """100-item nested dict, hostile values."""
         benchmark(walk, NESTED_HOSTILE)
+
+
+# --- escaper and decoder benchmarks ---
+
+
+class TestUtilityBenchmarks:
+    def test_decode_short_nested(self, benchmark: BenchmarkFixture) -> None:
+        """Double-encoded path: two decode layers."""
+        benchmark(decode_evasion, ENCODED_SHORT)
+
+    def test_decode_long_mixed(self, benchmark: BenchmarkFixture) -> None:
+        """~12KB of mixed URL/HTML/hex encodings."""
+        benchmark(decode_evasion, ENCODED_LONG)
+
+    def test_jinja2_escaper_long(self, benchmark: BenchmarkFixture) -> None:
+        """~11KB of overlapping delimiter runs."""
+        benchmark(jinja2_escaper, BRACES_LONG)
+
+    def test_path_escaper_long(self, benchmark: BenchmarkFixture) -> None:
+        """~10KB path with dot segments."""
+        benchmark(path_escaper, PATH_LONG)
