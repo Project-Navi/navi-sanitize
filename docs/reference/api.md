@@ -31,7 +31,7 @@ Sanitize a single string through the universal pipeline.
 2. Invisible character stripping
 3. NFKC normalization
 4. Homoglyph replacement
-5. Re-NFKC (if homoglyphs were replaced --- ensures idempotency)
+5. Re-NFKC (if homoglyphs were replaced, so the output stays NFKC-normalized)
 6. Escaper (if provided)
 
 Returns output for any `str`, including lone surrogates. Logs a warning with a count (never content) when a stage changes the input. Escaper output is not re-sanitized, and exceptions raised by the escaper propagate.
@@ -58,7 +58,7 @@ clean(42)  # TypeError: clean() requires str, got int
 
 ## `walk(data, *, escaper=None, max_depth=128)`
 
-Recursively sanitize every string in a dict/list/nested structure.
+Sanitize every string in a nested dict/list structure, dict keys included.
 
 Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None, max_depth=128) -> T`
 

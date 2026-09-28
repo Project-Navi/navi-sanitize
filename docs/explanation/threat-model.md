@@ -6,7 +6,7 @@ navi-sanitize is a deterministic text sanitization library. It removes and norma
 
 1. **Deterministic** --- same input, same output. No ML models, no confidence scores, no thresholds.
 2. **Narrow, predictable changes** --- CJK, Arabic, Hebrew, emoji and most other text pass through, but some legitimate text is changed; see [What Changes Legitimate Text](#what-changes-legitimate-text).
-3. **Returns output for any string** --- `clean()`, `walk()` and `decode_evasion()` do not raise on string content, including lone surrogates. Non-`str` arguments raise `TypeError`, `walk(max_depth=-1)` raises `ValueError`, and a custom escaper's own exceptions propagate.
+3. **Returns output for any string** --- `clean()`, `walk()` and `decode_evasion()` do not raise on string content, including lone surrogates. Non-`str` arguments to `clean()` and `decode_evasion()` raise `TypeError` (`walk()` returns non-container objects unchanged), `walk(max_depth=-1)` raises `ValueError`, and a custom escaper's own exceptions propagate.
 4. **Pluggable** --- the universal pipeline handles character-level vectors; escapers handle one destination each.
 
 ## Covered Threats
@@ -46,7 +46,7 @@ navi-sanitize is a deterministic text sanitization library. It removes and norma
 ### Path Traversal
 **Vector:** `../`, leading `/` and backslash sequences in a path fragment.
 **Example:** `"../../../etc/passwd"`.
-**Mitigation:** `path_escaper` (Stage 6) removes `.`/`..` segments, embedded `..`, leading slashes and backslashes. It is lexical: it does not confine the result to a directory, resolve symlinks, reject drive-qualified paths such as `C:/temp`, or check the filesystem, and the result may be empty. Join the result to a base directory and verify containment (for example with `Path.resolve()` and `is_relative_to()`) before using it.
+**Mitigation:** `path_escaper` (Stage 6) converts backslashes to `/` and removes leading slashes, empty, `.` and `..` segments, and embedded `..`. It is lexical: it does not confine the result to a directory, resolve symlinks, reject drive-qualified paths such as `C:/temp`, or check the filesystem, and the result may be empty. Join the result to a base directory and verify containment (for example with `Path.resolve()` and `is_relative_to()`) before using it.
 
 ### Compound Attacks
 **Examples:**
@@ -70,9 +70,10 @@ These are intended consequences of the character policy. Decide per field whethe
 - **Mapped letters inside real words.** `clean("привет")` returns `'пpивeт'`: the Cyrillic `р` and `е` become Latin, producing mixed-script text.
 - **Typography.** Curly quotes, en/em dashes and the minus sign become ASCII.
 - **Emoji sequences.** ZWJ (U+200D) is stripped, so family and profession emoji split into their parts; variation selectors (such as U+FE0F after `❤`) and tag sequences in subdivision flags are removed.
-- **Right-to-left text.** Arabic letter mark (U+061C) and LRM/RLM (U+200E/U+200F) are removed; rendering may need directional marks re-added downstream.
+- **Right-to-left text.** Arabic letter mark (U+061C), LRM/RLM (U+200E/U+200F) and the bidi embedding, override and isolate controls are removed; rendering may need directional marks re-added downstream.
+- **Spacing and line breaks.** Thin and hair spaces, the soft hyphen, U+2028/U+2029 and NEL are deleted, not replaced: `clean("10\u2009000")` returns `'10000'` and two lines joined by U+2028 run together.
 - **Mongolian.** Free variation selectors (U+180B--U+180D, U+180F) are removed.
-- **Compatibility forms.** NFKC folds ligatures, superscripts, circled and fullwidth forms (`ﬁ` → `fi`, `²` → `2`).
+- **Compatibility forms.** NFKC folds ligatures, superscripts, circled and fullwidth forms (`ﬁ` → `fi`, `²` → `2`); combined with the homoglyph map, the micro sign turns into `u` (`clean("5µm")` returns `'5um'`).
 
 ## Not Covered
 

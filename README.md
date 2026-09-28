@@ -10,7 +10,7 @@
 Deterministic sanitization of untrusted text for Python 3.12+, with no dependencies.
 `clean()` removes null bytes and 492 invisible, formatting and control characters,
 applies NFKC normalization, and replaces 66 curated homoglyphs (Cyrillic, Greek,
-Armenian, Cherokee and typographic lookalikes) with ASCII. An optional escaper then
+Armenian, Cherokee, Latin Extended and typographic lookalikes) with ASCII. An optional escaper then
 prepares the result for one destination. It normalizes characters; it is not a
 complete defense against prompt, template, HTML, SQL or path injection.
 
@@ -39,7 +39,7 @@ opt-in helpers that `clean()` never runs.
   variation selectors and tag characters go, Arabic/Hebrew directional marks are
   removed, and NFKC folds compatibility forms. Apply it to fields where that is acceptable.
 - **The homoglyph map is small.** Other confusables pass through; `is_mixed_script()`
-  on the raw input can flag them.
+  on the raw input can flag some of them.
 - **Escapers are narrow.** `jinja2_escaper` breaks up Jinja2's default delimiters; it
   is not a sandbox or an HTML escaper, so pass untrusted text to templates as data.
   `path_escaper` edits strings only: no directory confinement, symlink or drive-letter

@@ -2,8 +2,8 @@
 """Sanitize user input at the edge of a FastAPI application.
 
 Two patterns: Pydantic AfterValidator for model fields, and FastAPI Depends
-for query parameters. Both ensure every string is sanitized before your
-application logic sees it.
+for query parameters. Both sanitize the annotated fields and dependency
+parameters before your application logic sees them.
 
 Usage:
     python examples/fastapi_pydantic.py

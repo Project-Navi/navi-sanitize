@@ -112,7 +112,7 @@ Messages carry counts only, never input text:
 
 - `Removed 2 null byte(s) from value`
 - `Stripped 3 invisible character(s) from value`
-- `Normalized 1 fullwidth/compatibility character(s) in value`
+- `Normalized 1 fullwidth/compatibility character(s) in value` (approximate: when normalization changes the string's length, the count includes shifted positions)
 - `Replaced 1 homoglyph(s) in value`
 - `Decoded 2 encoding layer(s) from value` (from `decode_evasion()`)
 - `walk() dict key collision: 1 key(s) sanitized to an existing key; last value kept`

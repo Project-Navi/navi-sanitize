@@ -3,7 +3,7 @@
 """Homoglyph mapping data for confusable character replacement.
 
 Data module — contains no logic, only the character map.
-Cyrillic, Greek, Armenian, Cherokee, and typographic lookalikes.
+Cyrillic, Greek, Armenian, Cherokee, Latin Extended, and typographic lookalikes.
 """
 
 from __future__ import annotations

@@ -63,7 +63,7 @@ Input string
 
 **What:** Removes 492 invisible or near-invisible Unicode characters across 9 categories using a single compiled regex.
 
-**Why:** Invisible characters are the most common evasion vector. They can:
+**Why:** Invisible characters change text without changing how it looks. They can:
 - Break word boundaries without visible change (`"adm\u200bin"` looks like `"admin"`)
 - Hide content from humans while remaining in the byte stream
 - Encode invisible ASCII via the Unicode Tag block (tag smuggling)
@@ -81,7 +81,7 @@ Input string
 | Variation selector supplement | 240 | U+E0100--U+E01EF | VS17--VS256, extended glyph modifiers |
 | Bidi controls | 9 | Individual chars | Directional overrides, embeddings, isolates |
 | C0 controls | 28 | U+0001--U+001F | Terminal injection (BS, ESC, BEL); excludes TAB/LF/CR |
-| C1 controls | 32 | U+0080--U+009F | CSI (equivalent to ESC+[), NEL, invisible in all contexts |
+| C1 controls | 32 | U+0080--U+009F | CSI (equivalent to ESC+[) and other terminal controls; NEL (a line break) is removed too |
 
 See [Character Reference](../reference/character-reference.md) for the complete table.
 
@@ -136,7 +136,7 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 | Armenian | 2 | Օ→O, Ս→S |
 | Cherokee | 1 | Ꭺ→A |
 | Latin extended | 1 | ı→i |
-| Typographic | 7 | −→-, –→-, —→-, '→', '→', "→", "→" |
+| Typographic | 7 | −→-, –→-, —→-, ‘→', ’→', “→", ”→" |
 
 See [Character Reference](../reference/character-reference.md) for the complete map with codepoints.
 
@@ -184,15 +184,15 @@ See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for how to b
 
 ## Why Order Matters
 
-The stage order is not arbitrary --- reordering breaks security guarantees.
+The stage order is not arbitrary --- each stage relies on the ones before it, and reordering lets some combinations through.
 
-**Null bytes before invisible chars:** Null bytes can split strings that, once joined, form invisible character sequences. Removing nulls first ensures the invisible stage sees the actual content.
+**Null bytes first:** Nulls are removed before anything else so no later stage or escaper sees them. Stages 1 and 2 both delete single code points, so their relative order does not change the result.
 
 **Invisibles before NFKC:** Some invisible characters are compatibility forms that NFKC would normalize rather than remove. Stripping them first is more aggressive and correct.
 
-**NFKC before homoglyphs:** NFKC can produce characters that are homoglyph targets (e.g., mathematical symbols normalizing to Greek letters). Running normalization first ensures the homoglyph map catches everything.
+**NFKC before homoglyphs:** NFKC can produce characters that are homoglyph targets (e.g., mathematical symbols normalizing to Greek letters). Running normalization first means the homoglyph map sees those characters.
 
-**Re-NFKC after homoglyphs:** Homoglyph replacement can leave Latin characters adjacent to combining marks that NFKC would compose into precomposed forms. Running NFKC again ensures the output is fully normalized and `clean()` is idempotent.
+**Re-NFKC after homoglyphs:** Homoglyph replacement can leave Latin characters adjacent to combining marks that NFKC would compose into precomposed forms. Running NFKC again keeps the output NFKC-normalized, which is what keeps `clean()` idempotent in the tested cases (see Stage 5).
 
 **Normalization before escaper:** Escapers match ASCII syntax. Fullwidth `｛｛` or `．．／` only become `{{` or `../` during NFKC, so an escaper that ran earlier would miss them.
 

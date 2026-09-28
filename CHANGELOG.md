@@ -7,7 +7,7 @@ from [conventional commits](https://www.conventionalcommits.org/).
 
 ## [0.2.2] - Unreleased
 
-Prepared maintenance release; not yet published. No API, dependency or Python-version changes.
+Prepared maintenance release; not yet published. No exports, signatures, defaults, dependencies or supported Python versions change.
 
 ### Bug Fixes
 
@@ -20,7 +20,7 @@ Prepared maintenance release; not yet published. No API, dependency or Python-ve
 
 - `decode_evasion()` raises `TypeError` for non-`str` input; `bytes` were previously accepted by accident.
 - New log message: `walk() dict key collision: N key(s) sanitized to an existing key; last value kept`.
-- The NFKC warning now includes a count: `Normalized N fullwidth/compatibility character(s) in value` (was `Normalized fullwidth character(s) in value`).
+- The NFKC warning now includes an approximate count: `Normalized N fullwidth/compatibility character(s) in value` (was `Normalized fullwidth character(s) in value`).
 - The sdist is built from an explicit allowlist and no longer includes CLAUDE.md, CI and tooling configuration, or the whitepaper PDF/TeX sources.
 - Package summary no longer claims legitimate Unicode is preserved.
 

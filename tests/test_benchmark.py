@@ -13,12 +13,12 @@ from navi_sanitize import clean, decode_evasion, jinja2_escaper, path_escaper, w
 # --- Test data ---
 
 CLEAN_SHORT = "Hello, this is perfectly normal text."
-CLEAN_LONG = "Hello world. " * 1000  # ~13KB
+CLEAN_LONG = "Hello world. " * 1000  # 13,000 chars
 
 HOSTILE_SHORT = "n\u0430vi {{ c\u043enfig }}\x00\u200b"
-HOSTILE_LONG = "n\u0430vi {{ c\u043enfig }}\x00\u200b " * 200  # ~10KB
+HOSTILE_LONG = "n\u0430vi {{ c\u043enfig }}\x00\u200b " * 200  # 4,000 chars
 
-HOSTILE_100K = HOSTILE_SHORT * 2500  # ~100KB
+HOSTILE_100K = HOSTILE_SHORT * 2500  # 47,500 chars (57,500 bytes UTF-8)
 
 NESTED_CLEAN = {
     "users": [
@@ -27,9 +27,9 @@ NESTED_CLEAN = {
 }
 
 ENCODED_SHORT = "%252e%252e%252fetc%252fpasswd"
-ENCODED_LONG = "%2e%2e%2f&lt;x&gt;\\x41 plain text " * 400  # ~12KB, mixed encodings
-BRACES_LONG = "{{% x %}} {#}} {{{ " * 600  # ~11KB, overlapping delimiters
-PATH_LONG = "a/.../b/../c/./d/" * 600  # ~10KB
+ENCODED_LONG = "%2e%2e%2f&lt;x&gt;\\x41 plain text " * 400  # 13,600 chars, mixed encodings
+BRACES_LONG = "{{% x %}} {#}} {{{ " * 600  # 11,400 chars, overlapping delimiters
+PATH_LONG = "a/.../b/../c/./d/" * 600  # 10,200 chars
 
 NESTED_HOSTILE = {
     "users": [
@@ -60,7 +60,7 @@ class TestCleanBenchmarks:
         benchmark(clean, HOSTILE_LONG, escaper=jinja2_escaper)
 
     def test_clean_100k_hostile(self, benchmark: BenchmarkFixture) -> None:
-        """100KB hostile payload throughput."""
+        """47,500-char hostile payload throughput."""
         benchmark.pedantic(
             clean,
             args=(HOSTILE_100K,),

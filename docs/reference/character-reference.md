@@ -103,7 +103,7 @@ Complete tables of all characters handled by navi-sanitize's pipeline.
 
 | Range | Why Stripped |
 |-------|-------------|
-| U+0080--U+009F | Includes CSI (U+009B, equivalent to ESC+[) and NEL (U+0085); invisible in all modern contexts |
+| U+0080--U+009F | Includes CSI (U+009B, equivalent to ESC+[); not rendered as text. NEL (U+0085) is a line break and is removed too |
 
 ---
 
@@ -215,10 +215,10 @@ Complete tables of all characters handled by navi-sanitize's pipeline.
 | − | U+2212 | Minus sign | - (hyphen) |
 | – | U+2013 | En dash | - (hyphen) |
 | — | U+2014 | Em dash | - (hyphen) |
-| ' | U+2018 | Left single quote | ' (apostrophe) |
-| ' | U+2019 | Right single quote | ' (apostrophe) |
-| " | U+201C | Left double quote | " (straight quote) |
-| " | U+201D | Right double quote | " (straight quote) |
+| ‘ | U+2018 | Left single quote | ' (apostrophe) |
+| ’ | U+2019 | Right single quote | ' (apostrophe) |
+| “ | U+201C | Left double quote | " (straight quote) |
+| ” | U+201D | Right double quote | " (straight quote) |
 
 ---
 

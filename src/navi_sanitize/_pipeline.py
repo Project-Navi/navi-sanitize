@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 """Core sanitization pipeline.
 
-Six stages in strict order. Reordering breaks security:
+Six stages in strict order; each relies on the ones before it:
 1. Null bytes   — prevent C-level string truncation
 2. Invisibles   — strip 492 chars (zero-width, format/control, VS, tag block, bidi, C0/C1)
 3. NFKC         — normalize fullwidth and compatibility forms
 4. Homoglyphs   — replace confusable characters with Latin equivalents
-5. Re-NFKC      — re-normalize if homoglyphs were replaced (idempotency)
+5. Re-NFKC      — re-normalize if homoglyphs were replaced (keeps output NFKC-stable)
 6. Escaper      — caller-supplied context-specific escaping (optional)
 """
 
@@ -89,7 +89,7 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     2. Invisible character stripping (492 chars across 9 categories)
     3. NFKC normalization (fullwidth → standard forms)
     4. Homoglyph replacement (Cyrillic/Greek/Armenian/Cherokee/typographic → Latin)
-    5. Re-NFKC (if homoglyphs were replaced — ensures idempotency)
+    5. Re-NFKC (if homoglyphs were replaced, so the output stays NFKC-normalized)
     6. Escaper (if provided)
 
     Returns output for any str input; raises TypeError for non-str input or
@@ -137,7 +137,7 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 
 
 def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) -> T:
-    """Recursively sanitize every string in a dict/list/nested structure.
+    """Sanitize every string in a nested dict/list structure, dict keys included.
 
     Dicts (keys and values) and lists are copied as plain dict/list; the
     input is never modified. Other objects (tuples, sets, bytes, custom

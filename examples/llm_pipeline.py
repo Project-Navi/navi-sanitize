@@ -4,7 +4,8 @@
 Invisible Unicode characters encode instructions that tokenizers read but
 humans can't see. Tag block characters (U+E0001-U+E007F) spell invisible
 ASCII. Bidi overrides reorder displayed text. Zero-width chars break keyword
-filters. clean() strips all of these before the text enters your prompt.
+filters. clean() strips these before the text enters your prompt. It does not
+stop instructions written in plain, visible text.
 
 Usage:
     python examples/llm_pipeline.py

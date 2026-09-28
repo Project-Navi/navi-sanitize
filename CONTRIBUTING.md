@@ -8,7 +8,7 @@ This is the canonical maintainer guide: setup, the checks CI runs, conventions a
 git clone https://github.com/Project-Navi/navi-sanitize.git
 cd navi-sanitize
 uv sync              # dev tools pinned in uv.lock (requires uv)
-pre-commit install   # optional: ruff, mypy and file checks on commit
+pre-commit install   # optional; pre-commit is not in the dev group (e.g. uv tool install pre-commit)
 ```
 
 ## Checks
@@ -25,14 +25,14 @@ uv run pytest tests/ -v --benchmark-disable          # Python 3.12 and 3.13 in C
 uv sync --group docs && uv run python scripts/build_docs.py --out site
 
 # Distribution: exact wheel + sdist, installed behavior, sdist rebuild
-uv build --out-dir dist && uv run python scripts/verify_dist.py dist
+rm -rf dist && uv build && uv run python scripts/verify_dist.py dist
 ```
 
 CI also audits the locked dev and docs dependencies with `pip-audit`, and runs Semgrep, OpenSSF Scorecard and Atheris fuzzing:
 
 ```bash
-uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_clean -atheris_runs=100000
-uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_walk -atheris_runs=100000
+uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_clean -atheris_runs=100000 -max_len=4096
+uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_walk -atheris_runs=100000 -max_len=4096
 ```
 
 Benchmarks run on demand: `uv run pytest tests/test_benchmark.py -v`. Compare versions on the same machine and interpreter.
@@ -47,7 +47,7 @@ Benchmarks run on demand: `uv run pytest tests/test_benchmark.py -v`. Compare ve
 - **Escaper output is never re-sanitized.** That trust boundary is documented; do not add a second pass.
 - **Logs:** messages include counts (`"Stripped 3 invisible character(s)"`) and never input content, keys or values. The library only adds a `NullHandler`.
 - **`walk()`** never modifies its input and stays iterative. Tests nested deeper than 128 levels pass `max_depth=` explicitly.
-- **Non-Latin test data:** ruff's `RUF001`/`RUF003` fire on intentional Cyrillic, Greek, Armenian or Cherokee characters; such files start with `# ruff: noqa: RUF001, RUF003`.
+- **Non-Latin test data:** ruff's `RUF001`/`RUF003` fire on intentional Cyrillic, Greek, Armenian or Cherokee characters; such files start with `# ruff: noqa: RUF001, RUF003` (or `RUF003` alone when only comments contain them).
 - **Large benchmark payloads** use `benchmark.pedantic()` to bound iterations.
 
 ## Pull Requests
