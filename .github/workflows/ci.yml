@@ -26,6 +26,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Install dependencies
         run: uv sync --frozen
       - name: Ruff check
@@ -44,6 +45,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Install dependencies
         run: uv sync --frozen
       - name: Mypy
@@ -62,6 +64,7 @@ jobs:
         with:
           version: "0.12.20"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-${{ matrix.python-version }}
       - name: Install dependencies
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
@@ -112,6 +115,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Export audit inputs from uv.lock
         run: |
           # Runtime scope: the package declares no dependencies; fail if that changes.
@@ -168,6 +172,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Build wheel and sdist
         run: uv build
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -193,6 +198,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Install docs dependencies
         run: uv sync --frozen --group docs
       - name: Build and check site

@@ -29,6 +29,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}-${{ matrix.target }}
       - name: Install dependencies
         run: |
           uv sync --frozen

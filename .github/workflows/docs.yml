@@ -27,6 +27,7 @@ jobs:
           version: "0.12.20"
           python-version: "3.12"
           enable-cache: true
+          cache-suffix: ${{ github.workflow }}-${{ github.job }}
       - name: Install docs dependencies
         run: uv sync --frozen --group docs
       - name: Build and check site
