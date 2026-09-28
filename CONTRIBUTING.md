@@ -1,99 +1,70 @@
 # Contributing to navi-sanitize
 
-Thanks for your interest in contributing. This guide covers the development workflow.
+This is the canonical maintainer guide: setup, the checks CI runs, conventions and the release path.
 
-## Development Setup
+## Setup
 
 ```bash
-# Clone the repo
 git clone https://github.com/Project-Navi/navi-sanitize.git
 cd navi-sanitize
-
-# Install dependencies (requires uv)
-uv sync
-
-# Install pre-commit hooks
-pre-commit install
+uv sync              # dev tools pinned in uv.lock (requires uv)
+pre-commit install   # optional: ruff, mypy and file checks on commit
 ```
 
-## Running Tests
+## Checks
+
+CI runs all of these; `quality-gate` fails unless every one succeeds.
 
 ```bash
-# Full test suite
-uv run pytest tests/ -v --benchmark-disable
+uv run ruff check src/ tests/ scripts/
+uv run ruff format --check src/ tests/ scripts/
+uv run mypy --strict src/navi_sanitize/ scripts/
+uv run pytest tests/ -v --benchmark-disable          # Python 3.12 and 3.13 in CI
 
-# Single test file
-uv run pytest tests/test_clean.py -v --benchmark-disable
+# Docs: builds from a filtered copy of docs/, then checks pages, search, links
+uv sync --group docs && uv run python scripts/build_docs.py --out site
 
-# Single test
-uv run pytest tests/test_clean.py::test_name -v --benchmark-disable
-
-# With coverage
-uv run coverage run -m pytest tests/ --benchmark-disable
-uv run coverage report --include='src/navi_sanitize/**'
+# Distribution: exact wheel + sdist, installed behavior, sdist rebuild
+uv build --out-dir dist && uv run python scripts/verify_dist.py dist
 ```
 
-## Code Quality
-
-All checks run automatically via pre-commit hooks and CI:
+CI also audits the locked dev and docs dependencies with `pip-audit`, and runs Semgrep, OpenSSF Scorecard and Atheris fuzzing:
 
 ```bash
-# Lint
-uv run ruff check src/ tests/
-
-# Format
-uv run ruff format --check src/ tests/
-
-# Type check
-uv run mypy --strict src/navi_sanitize/
-
-# Run all pre-commit hooks
-pre-commit run --all-files
+uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_clean -atheris_runs=100000
+uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_walk -atheris_runs=100000
 ```
 
-## Commit Messages
+Benchmarks run on demand: `uv run pytest tests/test_benchmark.py -v`. Compare versions on the same machine and interpreter.
 
-This project uses [conventional commits](https://www.conventionalcommits.org/):
+## Conventions
 
-- `feat:` — new feature
-- `fix:` — bug fix
-- `test:` — adding or updating tests
-- `docs:` — documentation changes
-- `ci:` — CI/CD changes
-- `chore:` — maintenance tasks
-- `refactor:` — code refactoring
-- `perf:` — performance improvement
+- **Commits:** [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`, `refactor:`, `perf:`).
+- **Tests first:** for a bug fix, add a failing regression test, then fix the code. Keep `src/navi_sanitize/` fully covered.
+- **Runtime:** standard library only, Python 3.12+, line length 100, `mypy --strict`.
+- **Pipeline order is part of the contract.** Null bytes, invisibles, NFKC, homoglyphs, re-NFKC, escaper. See [Pipeline Architecture](https://docs.projectnavi.ai/navi-sanitize/explanation/pipeline-architecture/) before changing a stage, and add attack vectors to `tests/test_adversarial.py` or `tests/test_bypass_attempts.py`.
+- **Ported adversarial suite:** `tests/test_adversarial.py` holds cases ported from navi-bootstrap; their expected outputs act as a compatibility oracle, so change them only deliberately.
+- **Escaper output is never re-sanitized.** That trust boundary is documented; do not add a second pass.
+- **Logs:** messages include counts (`"Stripped 3 invisible character(s)"`) and never input content, keys or values. The library only adds a `NullHandler`.
+- **`walk()`** never modifies its input and stays iterative. Tests nested deeper than 128 levels pass `max_depth=` explicitly.
+- **Non-Latin test data:** ruff's `RUF001`/`RUF003` fire on intentional Cyrillic, Greek, Armenian or Cherokee characters; such files start with `# ruff: noqa: RUF001, RUF003`.
+- **Large benchmark payloads** use `benchmark.pedantic()` to bound iterations.
 
-## Pull Request Process
+## Pull Requests
 
-1. Fork the repo and create a branch from `main`
-2. Write or update tests for your changes
-3. Ensure all checks pass (`pre-commit run --all-files`)
-4. Keep PRs focused — one concern per PR
-5. Open the PR against `main`
+1. Branch from `main` (`<type>/<slug>`).
+2. Add or update tests with the change.
+3. Run the checks above.
+4. Keep each PR to one concern and open it against `main`.
 
-## Testing Philosophy
+## Releases
 
-- **TDD:** write a failing test first, then implement
-- **Coverage:** maintain 100% coverage on `src/navi_sanitize/`
-- **Adversarial tests:** if adding or modifying a pipeline stage, add attack vectors to `tests/test_adversarial.py` or `tests/test_bypass_attempts.py`
-- **Warnings include counts:** `"Stripped 3 invisible character(s)"` not `"Stripped invisible character(s)"`
-
-## Architecture Notes
-
-- `src/` layout with internal modules prefixed `_`
-- Zero external dependencies — stdlib only
-- Pipeline stage order matters — see the [wiki](https://github.com/Project-Navi/navi-sanitize/wiki/Pipeline-Architecture)
-- `ruff` rules `RUF001`/`RUF003` are intentionally suppressed in test and data files containing non-Latin characters
+Maintainers only. Set the version in `pyproject.toml` and `src/navi_sanitize/__init__.py`, run `uv lock`, and add the release to `CHANGELOG.md`. Publishing a GitHub release runs `publish.yml`: CI, the shared build workflow, `verify-dist` on the built artifacts against the release tag, then PyPI Trusted Publishing and release assets. Docs deploy from `main` via `docs.yml`.
 
 ## Reporting Bugs
 
-Open an issue on [GitHub Issues](https://github.com/Project-Navi/navi-sanitize/issues). Include:
-
-- Python version
-- Minimal reproduction
-- Expected vs actual behavior
+Open an issue on [GitHub Issues](https://github.com/Project-Navi/navi-sanitize/issues) with the Python version, a minimal reproduction, and expected versus actual behavior.
 
 ## Security Vulnerabilities
 
-**Do not open a public issue.** See [SECURITY.md](SECURITY.md) for reporting instructions.
+**Do not open a public issue.** See [SECURITY.md](SECURITY.md).
