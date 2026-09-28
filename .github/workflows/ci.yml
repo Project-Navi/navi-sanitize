@@ -105,10 +105,25 @@ jobs:
       - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: true
-      - name: Install dependencies
-        run: uv sync --frozen
-      - name: pip-audit
-        run: uvx pip-audit==2.9.0
+      - name: Export audit inputs from uv.lock
+        run: |
+          # Runtime scope: the package declares no dependencies; fail if that changes.
+          uv export --quiet --frozen --no-default-groups --no-emit-project --no-header \
+            --format requirements.txt -o "$RUNNER_TEMP/runtime-requirements.txt"
+          if grep -qvE '^[[:space:]]*(#|$)' "$RUNNER_TEMP/runtime-requirements.txt"; then
+            echo "::error::Unexpected runtime dependencies"
+            cat "$RUNNER_TEMP/runtime-requirements.txt"
+            exit 1
+          fi
+          # Toolchain scope: every locked dev and docs package, hash-pinned.
+          uv export --quiet --frozen --all-groups --no-emit-project --no-header \
+            --format requirements.txt -o "$RUNNER_TEMP/audit-requirements.txt"
+          sha256sum uv.lock "$RUNNER_TEMP/audit-requirements.txt"
+      - name: pip-audit (locked dev and docs dependencies)
+        # Audits exactly the exported pins; no resolution, fails on any skip.
+        run: >-
+          uvx pip-audit==2.9.0 --strict --disable-pip --require-hashes
+          --progress-spinner off -r "$RUNNER_TEMP/audit-requirements.txt"
 
   # ── Required check: quality-gate ────────────────────────────────────
   # CONTRACT: org ruleset requires this exact check name
