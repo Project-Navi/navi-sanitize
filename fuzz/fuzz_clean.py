@@ -10,6 +10,7 @@ Usage:
 
 from __future__ import annotations
 
+import re
 import sys
 import unicodedata
 from copy import deepcopy
@@ -20,6 +21,8 @@ with atheris.instrument_imports():
     from navi_sanitize import clean, jinja2_escaper, path_escaper, walk
     from navi_sanitize._homoglyphs import HOMOGLYPH_MAP
     from navi_sanitize._invisible import INVISIBLE_RE
+
+_JINJA2_DELIMITER_RE = re.compile(r"\{\{|\}\}|\{%|%\}|\{#|#\}")
 
 
 def fuzz_clean(data: bytes) -> None:
@@ -51,6 +54,16 @@ def fuzz_clean(data: bytes) -> None:
 
         # Invariant: idempotent
         assert clean(result) == result
+    else:
+        # Invariant: built-in escapers are idempotent through clean()
+        assert clean(result, escaper=escaper) == result
+
+        if escaper is jinja2_escaper:
+            # Invariant: no raw default delimiter survives
+            assert not _JINJA2_DELIMITER_RE.search(result)
+        elif result:
+            # Invariant: no empty, "." or ".." path segment
+            assert not {"", ".", ".."} & set(result.split("/"))
 
 
 def fuzz_walk(data: bytes) -> None:
