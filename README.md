@@ -15,7 +15,7 @@ Deterministic input sanitization for untrusted text — invisible characters, ho
 pip install navi-sanitize
 ```
 
-**[Documentation](https://project-navi.github.io/navi-sanitize/)** · [Getting Started](https://project-navi.github.io/navi-sanitize/getting-started/quickstart/) · [API Reference](https://project-navi.github.io/navi-sanitize/reference/api/) · [Threat Model](https://project-navi.github.io/navi-sanitize/explanation/threat-model/)
+**[Documentation](https://docs.projectnavi.ai/navi-sanitize/)** · [Getting Started](https://docs.projectnavi.ai/navi-sanitize/getting-started/quickstart/) · [API Reference](https://docs.projectnavi.ai/navi-sanitize/reference/api/) · [Threat Model](https://docs.projectnavi.ai/navi-sanitize/explanation/threat-model/)
 
 ```python
 from navi_sanitize import clean

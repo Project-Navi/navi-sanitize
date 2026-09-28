@@ -44,7 +44,7 @@ keywords = [
 Repository = "https://github.com/Project-Navi/navi-sanitize"
 Issues = "https://github.com/Project-Navi/navi-sanitize/issues"
 Changelog = "https://github.com/Project-Navi/navi-sanitize/blob/main/CHANGELOG.md"
-Documentation = "https://project-navi.github.io/navi-sanitize"
+Documentation = "https://docs.projectnavi.ai/navi-sanitize"
 
 [dependency-groups]
 dev = [
