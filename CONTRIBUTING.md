@@ -37,6 +37,8 @@ uv run --with atheris python fuzz/fuzz_clean.py --target=fuzz_walk -atheris_runs
 
 Benchmarks run on demand: `uv run pytest tests/test_benchmark.py -v`. Compare versions on the same machine and interpreter.
 
+CI pins uv (`version:` on each `setup-uv` step) and uses Python 3.12 outside the test matrix, so a new uv release or runner image does not change results mid-run. Dependabot does not bump the uv pin; update it deliberately.
+
 ## Conventions
 
 - **Commits:** [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `test:`, `docs:`, `ci:`, `chore:`, `refactor:`, `perf:`).
