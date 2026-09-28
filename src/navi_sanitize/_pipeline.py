@@ -92,13 +92,13 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     5. Re-NFKC (if homoglyphs were replaced — ensures idempotency)
     6. Escaper (if provided)
 
-    Always returns output. Logs warnings when input is modified.
+    Returns output for any str input; raises TypeError for non-str input or
+    non-str escaper output. Logs warnings (counts only) when input is modified.
 
     Security note: The escaper runs as the final stage. Its output is NOT
-    re-sanitized through the pipeline. Built-in escapers (jinja2_escaper,
-    path_escaper) are tested and safe. Custom escapers are within the
+    re-sanitized through the pipeline. Custom escapers are within the
     caller's trust boundary — if a custom escaper introduces hostile
-    characters, those characters will appear in the output.
+    characters or raises, that reaches the caller unchanged.
     """
     if not isinstance(text, str):
         raise TypeError(f"clean() requires str, got {type(text).__name__}")
@@ -139,18 +139,24 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) -> T:
     """Recursively sanitize every string in a dict/list/nested structure.
 
-    Non-string values pass through unchanged. Always returns output.
-    Like clean(), walk() never crashes on data shape — only programming
-    errors (max_depth < 0) raise ValueError.
+    Dicts (keys and values) and lists are copied as plain dict/list; the
+    input is never modified. Other objects (tuples, sets, bytes, custom
+    types) are not traversed and are returned by reference. walk() never
+    crashes on data shape; max_depth < 0 raises ValueError, and errors from
+    clean() or the escaper propagate.
 
     Uses a single iterative pass (no recursion, no deepcopy) so hostile
-    nesting depth cannot cause stack overflow. Logs a warning when nesting
-    exceeds *max_depth* but continues sanitizing. Cyclic references are
-    handled via identity tracking — each container is copied and sanitized
-    exactly once.
+    nesting depth cannot cause stack overflow. Cycles and shared containers
+    are preserved via identity tracking — each is copied and sanitized once.
 
-    Only dict and list contents are traversed; tuples, sets, and other
-    types pass through by reference.
+    *max_depth* is an advisory threshold, not a limit: one warning is logged
+    when a container is first reached at depth >= max_depth (the top-level
+    container is depth 0), and sanitizing continues. A shared container is
+    measured on the path where walk() first reaches it.
+
+    Lossy for dict keys: if distinct keys sanitize to the same key, the last
+    value is kept and a warning with the collision count is logged. Validate
+    keys yourself where distinct key identity matters.
     """
     if max_depth < 0:
         raise ValueError("max_depth must be >= 0")
@@ -218,9 +224,18 @@ def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) ->
                     max_depth,
                 )
                 depth_warned = True
+            collisions = 0
             for k, v in orig_d.items():
                 new_k = clean(k, escaper=escaper) if isinstance(k, str) else k
+                if new_k in copy_d:
+                    collisions += 1
                 copy_d[new_k] = _resolve(v, depth)
+            if collisions:
+                logger.warning(
+                    "walk() dict key collision: %d key(s) sanitized to an existing key; "
+                    "last value kept",
+                    collisions,
+                )
         elif list_stack:
             orig_l, copy_l, depth = list_stack.pop()
             if depth >= max_depth and not depth_warned:
