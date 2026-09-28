@@ -6,9 +6,7 @@ hide:
 
 # navi-sanitize
 
-**Deterministic input sanitization for untrusted text** --- invisible characters, homoglyphs, and encoding tricks, handled before your code sees them. Zero dependencies, no ML. Legitimate Unicode preserved by design.
-
-navi-sanitize removes invisible attacks from untrusted text before it reaches your application. It doesn't detect attacks --- it removes them. Implements the pipeline recommended by the [OWASP LLM Prompt Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
+**Deterministic sanitization for untrusted text.** Strips invisible and control characters, normalizes compatibility forms and replaces a curated set of homoglyphs before your code compares, stores, logs or renders the text. Python 3.12+, standard library only, no ML.
 
 [Get Started](getting-started/quickstart.md){ .md-button .md-button--primary }
 [API Reference](reference/api.md){ .md-button }
@@ -18,26 +16,27 @@ navi-sanitize removes invisible attacks from untrusted text before it reaches yo
 ## See the invisible
 
 ```python
+from navi_sanitize import clean
+
 evil = "system\u200b\u200cprompt"  # looks like "systemprompt" but has 2 hidden chars
-len(evil)           # 14 (not 12!)
-clean(evil)         # "systemprompt" — hidden chars stripped
+len(evil)    # 14
+clean(evil)  # 'systemprompt'
 ```
 
----
+## What it does
 
-## Features
+- **A fixed pipeline** --- null bytes, 492 invisible/format/control characters, NFKC normalization, 66 homoglyph replacements and re-normalization, then an optional escaper you choose
+- **Deterministic** --- the same input always gives the same output; property and fuzz tests check that `clean()` is idempotent
+- **No dependencies** --- standard library only
+- **Nested data** --- `walk()` sanitizes every string in dicts and lists, keys included, into new containers
+- **Content-free logging** --- warnings report counts ("Stripped 3 invisible character(s)"), never input text
+- **Opt-in helpers** --- `decode_evasion()` for nested URL/HTML/hex encodings, `detect_scripts()` / `is_mixed_script()` for mixed-script signals; none run automatically
 
-- **6-stage pipeline** --- null bytes, invisible characters, NFKC normalization, homoglyph replacement, re-NFKC for idempotency, pluggable escaper
-- **OWASP aligned** --- implements the NFKC + zero-width + control character sanitization recommended by the LLM Prompt Injection Prevention Cheat Sheet
-- **Only maintained option** --- both [confusable_homoglyphs](https://github.com/vhf/confusable_homoglyphs) and [homoglyphs](https://github.com/life4/homoglyphs) are archived; navi-sanitize is the only maintained Python library covering homoglyph replacement
-- **Deterministic** --- same input always produces the same output; no probabilistic models, no heuristics
-- **Zero dependencies** --- Python 3.12+ stdlib only; no third-party dependency risk
-- **Pluggable escapers** --- built-in Jinja2 and path traversal escapers; write your own in three lines
-- **Recursive sanitization** --- `walk()` sanitizes every string in nested dicts and lists
-- **Transparent logging** --- warnings include counts ("Stripped 3 invisible character(s)")
-- **Opt-in utilities** --- `decode_evasion()` for nested encoding, `detect_scripts()` / `is_mixed_script()` for mixed-script analysis --- not enabled by default
+## What it does not do
 
-## Quick Start
+It changes some legitimate text, its homoglyph map is deliberately small, and its escapers are narrow helpers rather than sandboxes. It does not replace HTML escaping, parameterized SQL, template autoescaping, path confinement or prompt-injection defenses. The [threat model](explanation/threat-model.md) lists the limits.
+
+## Quick start
 
 ```bash
 pip install navi-sanitize
@@ -46,24 +45,25 @@ pip install navi-sanitize
 ```python
 from navi_sanitize import clean
 
-clean("Неllo Wоrld")      # "Hello World" — Cyrillic Н/о replaced
-clean("price:\u200b 0")   # "price: 0" — zero-width space stripped
-clean("file\x00.txt")     # "file.txt" — null byte removed
+clean("Неllo Wоrld")      # 'Hello World' (Cyrillic Н and о replaced)
+clean("price:\u200b 0")   # 'price: 0' (zero-width space stripped)
+clean("file\x00.txt")     # 'file.txt' (null byte removed)
 ```
 
 ## Documentation
 
 | Page | Description |
 |------|-------------|
-| [Why This Matters](explanation/why-this-matters.md) | Use cases: LLM pipelines, web apps, config ingestion, logs, anti-phishing |
-| [Comparison](explanation/comparison.md) | How navi-sanitize compares to Unidecode, ftfy, confusable_homoglyphs, etc. |
-| [Getting Started](getting-started/quickstart.md) | Installation, basic usage, logging setup |
-| [API Reference](reference/api.md) | Complete function and type reference |
-| [Pipeline Architecture](explanation/pipeline-architecture.md) | The 6 stages in depth, with data flow |
-| [Threat Model](explanation/threat-model.md) | What's covered, what's not, design philosophy |
-| [Writing Custom Escapers](how-to/writing-custom-escapers.md) | How to extend with your own escapers |
-| [Character Reference](reference/character-reference.md) | Full invisible character and homoglyph tables |
-| [Performance](explanation/performance.md) | Benchmarks and optimization tips |
+| [Getting Started](getting-started/quickstart.md) | Installation, basic usage, logging |
+| [Writing Custom Escapers](how-to/writing-custom-escapers.md) | The escaper contract and examples |
+| [Why This Matters](explanation/why-this-matters.md) | Where character-level sanitization helps |
+| [Pipeline Architecture](explanation/pipeline-architecture.md) | The stages in order, and why the order matters |
+| [Threat Model](explanation/threat-model.md) | What is covered, what is not, what changes |
+| [Performance](explanation/performance.md) | Measured costs and hot-path advice |
+| [Comparison](explanation/comparison.md) | How it relates to other text tools |
+| [API Reference](reference/api.md) | Every public function and type |
+| [Character Reference](reference/character-reference.md) | Full invisible-character and homoglyph tables |
+| [Changelog](reference/changelog.md) | Release history |
 
 ## Links
 

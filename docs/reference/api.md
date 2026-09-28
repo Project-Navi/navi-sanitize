@@ -34,7 +34,7 @@ Sanitize a single string through the universal pipeline.
 5. Re-NFKC (if homoglyphs were replaced --- ensures idempotency)
 6. Escaper (if provided)
 
-Always returns output. Logs warnings when input is modified.
+Returns output for any `str`, including lone surrogates. Logs a warning with a count (never content) when a stage changes the input. Escaper output is not re-sanitized, and exceptions raised by the escaper propagate.
 
 **Examples:**
 
@@ -67,24 +67,28 @@ Uses PEP 695 generic syntax: `def walk[T](data: T, *, escaper=None, max_depth=12
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `data` | `T` | *(required)* | Any Python object; strings within dicts/lists are sanitized |
-| `escaper` | `Escaper \| None` | `None` | Optional escaper function applied to each string |
-| `max_depth` | `int` | `128` | Maximum nesting depth of containers; logs a warning and continues if exceeded. `ValueError` if negative |
+| `escaper` | `Escaper \| None` | `None` | Optional escaper applied to each string, keys included |
+| `max_depth` | `int` | `128` | Advisory warning threshold, not a limit (see below). `ValueError` if negative |
 
-**Returns:** `T` --- a deep copy of the input with all strings sanitized.
+**Returns:** `T` --- new dicts and lists with every string sanitized; other objects are the originals.
 
-**Raises:** `ValueError` --- if `max_depth` is negative.
+**Raises:** `ValueError` --- if `max_depth` is negative. `TypeError` from `clean()` (for example, an escaper returning a non-`str`) and escaper exceptions propagate.
 
 **Behavior by type:**
 
 | Type | Behavior |
 |------|----------|
 | `str` | Passed through `clean()` |
-| `dict` | Both keys and values sanitized recursively |
-| `list` | Elements sanitized recursively |
-| `tuple`, `set`, `frozenset` | Passed through by reference, not traversed |
-| `bytes`, `int`, `float`, `bool`, `None` | Passed through unchanged |
+| `dict` (and subclasses) | Rebuilt as a plain `dict`; keys and values sanitized |
+| `list` (and subclasses) | Rebuilt as a plain `list`; elements sanitized |
+| `tuple`, `set`, `frozenset`, `bytes`, other objects | Returned as the same object, not traversed |
+| `int`, `float`, `bool`, `None` | Returned unchanged |
 
-The original data is **never modified** --- `walk()` uses a single iterative copy-and-sanitize pass (no recursion, no `deepcopy`). Each container is copied exactly once; cyclic references are handled via identity tracking.
+The input is **never modified**. `walk()` makes one iterative pass (no recursion, no `deepcopy`): each dict and list is copied once, and cycles and shared containers keep their shape in the copy.
+
+**Key collisions:** if distinct keys sanitize (or escape) to the same key, the last value is kept at the first key's position and one warning per affected dict reports the count: `walk() dict key collision: 1 key(s) sanitized to an existing key; last value kept`. `walk()` is lossy in that case; validate keys yourself where distinct keys matter.
+
+**Depth threshold:** the top-level container is depth 0. The first time a container is reached at depth `>= max_depth`, one warning is logged and sanitizing continues. A container shared by several paths (or part of a cycle) is visited once, at the depth where it is first reached, so the threshold does not measure the longest path.
 
 **Examples:**
 
@@ -137,17 +141,17 @@ Escape Jinja2 template delimiters in a string.
 |-----------|------|-------------|
 | `text` | `str` | The string to escape |
 
-**Returns:** `str` --- the string with Jinja2 delimiters backslash-escaped.
+**Returns:** `str` --- the string with Jinja2's default delimiters backslash-escaped.
 
 **What it escapes:**
 - `{{` and `}}` --- expression delimiters
 - `{%` and `%}` --- statement delimiters
 - `{#` and `#}` --- comment delimiters
-- Runs of 2+ braces (`{{{`, `}}}`) --- handles triple-brace edge cases
+- Brace runs (`{{{`, `}}}`) and overlapping sequences (`{{%`, `{%}`, `%}}`)
 
-Uses a single-pass regex: `\{{2,}|\}{2,}|\{%|%\}|\{#|#\}`
+Each match is a maximal chain of overlapping delimiters, and every character in it is backslash-escaped, so the result contains no adjacent delimiter pair and escaping twice changes nothing.
 
-Each character in a matched delimiter is individually backslash-escaped.
+**Limits:** it only breaks up the default delimiters. It does not handle custom `Environment` delimiter settings, escape HTML, validate or sandbox templates, and the backslashes appear literally if the text is rendered. Prefer passing untrusted text to templates as context data.
 
 **Examples:**
 
@@ -158,6 +162,7 @@ jinja2_escaper("{{ config }}")     # "\\{\\{ config \\}\\}"
 jinja2_escaper("{% import os %}")  # "\\{\\% import os \\%\\}"
 jinja2_escaper("{# comment #}")    # "\\{\\# comment \\#\\}"
 jinja2_escaper("{{{ triple }}}")   # "\\{\\{\\{ triple \\}\\}\\}"
+jinja2_escaper("{{%")              # "\\{\\{\\%"
 jinja2_escaper("no delimiters")    # "no delimiters"
 ```
 
@@ -179,9 +184,13 @@ Remove path traversal sequences from a string.
 1. Replace backslashes with forward slashes
 2. Strip leading `/`
 3. Split on `/`
-4. Remove `..` and `.` segments
-5. Remove embedded `..` within segments (handles null-byte concatenation artifacts)
-6. Rejoin non-empty segments
+4. Delete every `..` inside each segment (handles null-byte concatenation artifacts, e.g. `file..txt` becomes `filetxt`)
+5. Drop segments that are then empty or `.`
+6. Rejoin the remaining segments
+
+The result never contains an empty, `.` or `..` segment, and applying the escaper again changes nothing.
+
+**Limits:** lexical string cleanup only. It does not confine the path to a base directory, resolve symlinks, touch the filesystem, or handle drive-qualified paths (`C:/temp` passes through), and it can return an empty string. Join the result to your base directory and check containment before use.
 
 **Examples:**
 
@@ -193,6 +202,7 @@ path_escaper("/etc/passwd")            # "etc/passwd"
 path_escaper("foo/../../../bar")       # "foo/bar"
 path_escaper("..\\..\\windows\\cmd")   # "windows/cmd"
 path_escaper("safe/path/file.txt")     # "safe/path/file.txt"
+path_escaper(".../file")               # "file"
 ```
 
 ---
@@ -216,12 +226,16 @@ Iteratively decode nested URL, HTML entity, and hex escape encodings from a stri
 
 **Returns:** `str` --- the decoded string.
 
+**Raises:** `TypeError` --- if `text` is not a `str`.
+
 **Behavior:**
 - Runs URL decoding → HTML entity unescaping → hex escape decoding (`\xHH`) per pass
 - A pass counts as one layer if the output differs from the input
 - Stops when a pass produces no change or `max_layers` is reached
 - `max_layers <= 0` is a no-op (returns `text` unchanged)
-- Invalid or partial encodings do not raise --- they pass through unchanged
+- Invalid or partial encodings do not raise --- they pass through unchanged, and undecodable percent bytes stay as `%XX` text
+- Literal characters, including lone surrogates, are never re-encoded; only `%XX` runs are percent-decoded
+- Decodes only these three formats; base64 and other encodings are left alone
 - Logs a warning with the layer count when decoding occurs; never includes decoded content in log messages
 
 **Examples:**
@@ -233,7 +247,7 @@ from navi_sanitize import decode_evasion, clean, path_escaper
 decode_evasion("%2e%2e%2fetc%2fpasswd")       # "../etc/passwd"
 
 # Double-encoded (two layers)
-decode_evasion("%252e%252e%252fetc%252fpasswd")  # "../../etc/passwd"
+decode_evasion("%252e%252e%252fetc%252fpasswd")  # "../etc/passwd"
 
 # HTML entities
 decode_evasion("&lt;script&gt;")              # "<script>"
@@ -276,7 +290,7 @@ Return the set of script buckets present in a string.
 | `cherokee` | Cherokee script characters |
 | `cjk` | CJK Unified, Hiragana, Katakana, and Hangul |
 
-Only the listed buckets are returned. Characters whose Unicode name doesn't match any known prefix are silently ignored. Non-alphabetic characters (digits, punctuation, emoji) are skipped.
+Only the listed buckets are returned; this is a heuristic based on the first word of each character's Unicode name, not a full Unicode Script property lookup. Characters from other scripts are ignored, and non-alphabetic characters (digits, punctuation, emoji) are skipped.
 
 **Examples:**
 

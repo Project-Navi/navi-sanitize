@@ -1,143 +1,122 @@
 # Threat Model
 
-navi-sanitize is a deterministic text sanitization library. It transforms untrusted input into safe output while preserving legitimate Unicode by design. This page documents what it covers, what it doesn't, and why.
+navi-sanitize is a deterministic text sanitization library. It removes and normalizes character-level tricks in untrusted input. This page documents what it covers, what it does not, and what it changes.
 
 ## Design Philosophy
 
-1. **Deterministic** --- same input, same output, every time. No ML models, no heuristics, no confidence scores.
-2. **Legitimate Unicode preserved** --- CJK, Arabic, Hebrew, emoji,¹ and non-confusable text pass through unchanged. A string that passes through unmodified was already clean.
-
-¹ ZWJ (U+200D) is stripped as a zero-width character, decomposing ZWJ emoji sequences into individual emoji. Bidi formatting marks (U+061C, U+200E/F, etc.) are also stripped — see [Stripping Arabic Letter Mark](#stripping-arabic-letter-mark-and-mongolian-fvs) below.
-3. **Always returns output** --- never throws on bad input (except `TypeError` for non-strings). Attackers can't cause denial of service by crafting inputs that error.
-4. **Pluggable** --- the universal pipeline handles common vectors; escapers handle context-specific threats.
+1. **Deterministic** --- same input, same output. No ML models, no confidence scores, no thresholds.
+2. **Narrow, predictable changes** --- CJK, Arabic, Hebrew, emoji and most other text pass through, but some legitimate text is changed; see [What Changes Legitimate Text](#what-changes-legitimate-text).
+3. **Returns output for any string** --- `clean()`, `walk()` and `decode_evasion()` do not raise on string content, including lone surrogates. Non-`str` arguments raise `TypeError`, `walk(max_depth=-1)` raises `ValueError`, and a custom escaper's own exceptions propagate.
+4. **Pluggable** --- the universal pipeline handles character-level vectors; escapers handle one destination each.
 
 ## Covered Threats
 
 ### Null Byte Injection
-**Vector:** `\x00` bytes in strings cause C-extension truncation.
+**Vector:** `\x00` in strings can truncate processing in C extensions and other languages.
 **Example:** `"admin\x00.jpg"` → file extension spoofing, filter bypass.
 **Mitigation:** All null bytes are stripped (Stage 1).
 
 ### Invisible Character Attacks
-**Vector:** 492 invisible Unicode characters hidden in text.
+**Vector:** 492 invisible, formatting and control characters.
 **Examples:**
-- Zero-width spaces breaking word boundaries: `"adm\u200bin"` looks like `"admin"`
-- Tag block encoding invisible ASCII (tag smuggling attacks)
-- Bidi overrides reordering displayed text to hide malicious content
-**Mitigation:** Single compiled regex strips all invisible characters (Stage 2).
+- Zero-width spaces splitting words: `"adm\u200bin"` looks like `"admin"`
+- Tag-block characters carrying invisible ASCII (tag smuggling)
+- Bidi overrides reordering displayed text
+- C0/C1 controls such as ESC that drive terminal escape sequences
+**Mitigation:** One compiled regex strips the whole set (Stage 2).
 
 ### Fullwidth/Compatibility Encoding Bypass
-**Vector:** Unicode compatibility forms spell ASCII words with non-ASCII bytes.
-**Example:** `"\uff41\uff44\uff4d\uff49\uff4e"` renders as `"admin"` but bypasses ASCII filters.
-**Mitigation:** NFKC normalization collapses compatibility forms (Stage 3).
+**Vector:** Compatibility forms spell ASCII words with other code points.
+**Example:** `"\uff41\uff44\uff4d\uff49\uff4e"` renders as `"admin"` but does not equal it.
+**Mitigation:** NFKC normalization (Stage 3).
 
 ### Homoglyph Substitution
-**Vector:** Characters from other scripts look identical to Latin letters.
+**Vector:** Letters from other scripts that look like Latin letters.
 **Examples:**
-- `"pаypal.com"` --- Cyrillic `а` (U+0430) looks like Latin `a` (U+0061)
-- `"Ꭺdmin"` --- Cherokee `Ꭺ` (U+13AA) looks like Latin `A`
-- `"−100"` --- minus sign `−` (U+2212) looks like hyphen `-`
-**Mitigation:** 66-pair replacement map covering Cyrillic, Greek, Armenian, Cherokee, Latin Extended, and typographic confusables (Stage 4). NFD decomposition before scanning prevents combining marks from hiding mapped base characters.
+- `"pаypal.com"` --- Cyrillic `а` (U+0430)
+- `"Ꭺdmin"` --- Cherokee `Ꭺ` (U+13AA)
+- `"−100"` --- minus sign `−` (U+2212)
+**Mitigation:** A curated 66-pair map (Stage 4), applied after NFD decomposition so combining marks cannot hide a mapped base letter. Confusables outside the map are not replaced.
 
 ### Jinja2 Template Injection (SSTI)
-**Vector:** `{{ }}`, `{% %}`, `{#  #}` delimiters in user input execute server-side code.
-**Example:** `"{{ config.__class__.__init__.__globals__ }}"` dumps server state.
-**Mitigation:** `jinja2_escaper` backslash-escapes all template delimiters (Stage 6).
+**Vector:** Untrusted text that becomes part of Jinja2 template *source* can open `{{ }}`, `{% %}` or `{# #}` tags.
+**Example:** `"{{ config.__class__.__init__.__globals__ }}"`.
+**Mitigation:** The safe design is to keep template source trusted and pass untrusted values as render context; Jinja2 does not evaluate context values. Where text must be embedded in source, `jinja2_escaper` (Stage 6) backslash-escapes every character of the default delimiters, including brace runs and overlapping sequences such as `{{%`. It does not handle custom delimiter settings, escape HTML or sandbox the template.
 
 ### Path Traversal
-**Vector:** `../`, leading `/`, backslash sequences access files outside intended directory.
-**Example:** `"../../../etc/passwd"` escapes the upload directory.
-**Mitigation:** `path_escaper` strips traversal sequences and normalizes separators (Stage 6).
+**Vector:** `../`, leading `/` and backslash sequences in a path fragment.
+**Example:** `"../../../etc/passwd"`.
+**Mitigation:** `path_escaper` (Stage 6) removes `.`/`..` segments, embedded `..`, leading slashes and backslashes. It is lexical: it does not confine the result to a directory, resolve symlinks, reject drive-qualified paths such as `C:/temp`, or check the filesystem, and the result may be empty. Join the result to a base directory and verify containment (for example with `Path.resolve()` and `is_relative_to()`) before using it.
 
-### Compound/Mixed Attacks
-**Vector:** Combining multiple vectors to bypass single-layer defenses.
+### Compound Attacks
 **Examples:**
-- `"{{ cоnfig }}"` --- Jinja2 delimiters + Cyrillic homoglyph
-- `"n\u0430vi\x00"` --- homoglyph + null byte
-- `"../\x00../../etc/passwd"` --- path traversal + null byte concatenation
-**Mitigation:** All universal stages run in sequence, each removing its category before the next stage processes the result. Compound attacks are disarmed layer by layer.
+- `"{{ cоnfig }}"` --- Jinja2 delimiters plus a Cyrillic homoglyph
+- `"n\u0430vi\x00"` --- homoglyph plus null byte
+- `"../\x00../../etc/passwd"` --- traversal split by a null byte
+**Mitigation:** Each universal stage removes its category before the next runs, so the escaper sees normalized text.
 
 ### Multi-Encoding Evasion (opt-in)
-**Vector:** Attackers nest URL, HTML entity, and hex encodings (`%252e%252e%252f`, `&amp;lt;script&amp;gt;`) to sneak payloads past single-layer decoders.
-**Example:** `"%252e%252e%252fetc%252fpasswd"` → double-encoded path traversal.
-**Mitigation:** `decode_evasion()` iteratively peels encoding layers (URL → HTML entity → hex per pass) until a pass produces no change. Compose with `clean()`: `clean(decode_evasion(raw), escaper=path_escaper)`.
-**Note:** Opt-in --- not part of the default pipeline. See [API Reference](../reference/api.md) for details.
+**Vector:** Nested URL, HTML entity and `\xHH` encodings (`%252e%252e%252f`, `&amp;lt;`) that single-layer decoders miss.
+**Example:** `"%252e%252e%252fetc%252fpasswd"` decodes to `"../etc/passwd"` in two passes.
+**Mitigation:** `decode_evasion()` runs URL → HTML entity → hex decoding per pass, up to `max_layers` passes (default 3). Invalid percent bytes stay as `%XX` text. Compose it yourself: `clean(decode_evasion(raw), escaper=path_escaper)`.
 
 ### Mixed-Script Detection (opt-in)
-**Vector:** Homoglyph-based phishing uses characters from multiple scripts (e.g., Cyrillic `а` mixed with Latin) to create visually identical but distinct strings.
-**Signal:** `detect_scripts()` and `is_mixed_script()` identify when text contains characters from 2+ scripts, which is a strong indicator of homoglyph spoofing. These are analysis tools --- they return information but do not modify text.
-**Note:** Most useful on **raw** input before `clean()`, since homoglyph replacement normalizes the mixed-script signal away.
+**Signal:** `detect_scripts()` and `is_mixed_script()` report when text mixes script buckets (Latin, Cyrillic, Greek, Arabic, Hebrew, Armenian, Cherokee, CJK), a common sign of homoglyph spoofing. They do not modify text, and scripts outside those buckets are ignored. Use them on **raw** input; `clean()` removes the signal.
+
+## What Changes Legitimate Text
+
+These are intended consequences of the character policy. Decide per field whether they are acceptable.
+
+- **Mapped letters inside real words.** `clean("привет")` returns `'пpивeт'`: the Cyrillic `р` and `е` become Latin, producing mixed-script text.
+- **Typography.** Curly quotes, en/em dashes and the minus sign become ASCII.
+- **Emoji sequences.** ZWJ (U+200D) is stripped, so family and profession emoji split into their parts; variation selectors (such as U+FE0F after `❤`) and tag sequences in subdivision flags are removed.
+- **Right-to-left text.** Arabic letter mark (U+061C) and LRM/RLM (U+200E/U+200F) are removed; rendering may need directional marks re-added downstream.
+- **Mongolian.** Free variation selectors (U+180B--U+180D, U+180F) are removed.
+- **Compatibility forms.** NFKC folds ligatures, superscripts, circled and fullwidth forms (`ﬁ` → `fi`, `²` → `2`).
 
 ## Not Covered
 
-navi-sanitize intentionally does **not** cover these categories:
-
 ### HTML/XML Escaping
-Use your template engine's auto-escaping (`markupsafe.escape()`, Jinja2 `autoescape=True`, Django templates). HTML escaping is context-dependent (attributes, script tags, CSS) and well-served by existing tools.
+Use your template engine's auto-escaping (`markupsafe.escape()`, Jinja2 `autoescape=True`, Django templates). HTML escaping depends on context (attributes, scripts, CSS).
 
 ### SQL Injection
-Use parameterized queries / prepared statements. SQL injection is a query-construction problem, not a text-sanitization problem.
+Use parameterized queries.
 
-### URL Decoding / Encoding
-Multi-encoding evasion (nested URL, HTML entity, and hex encodings) is now available via the **opt-in** `decode_evasion()` pre-processor. It is opt-in because decoding can change semantics and surprise callers who expect percent-encoded strings to remain intact. `decode_evasion()` is not part of `clean()` --- you must call it explicitly before the pipeline.
-
-**Base64 decoding is intentionally excluded in v1** to avoid false positives from decoding opaque blobs (API keys, encrypted tokens, binary data) that happen to be valid base64.
+### Encodings `decode_evasion()` does not handle
+Only URL percent-encoding, HTML entities and `\xHH` escapes are decoded, and only when you call it. Base64 and other formats are deliberately not decoded: arbitrary tokens, keys and binary data are often valid base64, and guessing would corrupt them. Decoding also changes meaning, which is why it is opt-in.
 
 ### LLM Prompt Injection
-Vendor prompt syntax moves too fast for a static library. The pluggable escaper design lets you write context-specific prompt escapers. See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for a skeleton.
+Instructions written in ordinary text are unaffected by character sanitization. The pluggable escaper can protect prompt delimiters you define (see [Writing Custom Escapers](../how-to/writing-custom-escapers.md)), but model-side defenses, least-privilege tools and review are still needed.
 
 ### Encoding Beyond Unicode
-navi-sanitize operates on Python `str` (Unicode). It does not handle raw byte streams, legacy encodings (Shift-JIS, ISO-8859-1), or binary data. Decode to `str` first.
+navi-sanitize operates on Python `str`. Decode bytes and legacy encodings (Shift-JIS, ISO-8859-1) to `str` first.
 
-### NFKC Normalization Creates Injection-Sensitive Characters
+### Characters NFKC Creates
+NFKC turns some code points into security-sensitive ASCII: fullwidth `＜`/`＞` become `<`/`>`, fullwidth quotes become `"`/`'`, and the Greek question mark (U+037E) becomes `;`. That is the point of normalizing, but the result may need escaping for its destination. The built-in escapers run after NFKC, so NFKC-produced braces, dots and slashes are handled for their own destinations; provide an escaper for anything else.
 
-NFKC normalization (Stage 3) converts certain Unicode codepoints to security-sensitive ASCII:
-fullwidth angle brackets (U+FF1C/U+FF1E) become `<`/`>`, fullwidth quotes (U+FF02/U+FF07)
-become `"`/`'`, and Greek question mark (U+037E) becomes `;`. These conversions are correct
-for security normalization --- they prevent bypass via Unicode variants --- but the resulting
-characters can enable injection in HTML, shell, or SQL contexts.
+### Latin Lookalikes Within Latin
+Small capitals (`ᴀᴅᴍɪɴ`, U+1D00--U+1D22) and IPA letters such as `ɑ` (U+0251) are Latin script and not mapped. Use application-level allowlists for high-risk identifiers such as usernames.
 
-**The built-in escapers handle their own domains:** `jinja2_escaper` catches all NFKC-produced
-brace combinations; `path_escaper` catches all NFKC-produced dot/slash combinations. For other
-contexts, provide an appropriate escaper. See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for examples including
-`html.escape()` and `shlex.quote()` wrappers.
+### Dictionary Key Identity
+`walk()` sanitizes keys. Distinct keys that sanitize (or escape) to the same string collide: the last value is kept and a warning with the collision count is logged. Where distinct keys must be preserved, validate before or after sanitizing.
 
-### Stripping Arabic Letter Mark and Mongolian FVS
-
-Arabic letter mark (U+061C) is stripped because it is invisible and can hide content from
-pattern-matching tools. However, it is legitimately used in RTL text to influence word joining
-behavior. Similarly, Mongolian Free Variation Selectors (U+180B--U+180D, U+180F) are stripped
-because they are invisible glyph modifiers exploitable for evasion, but they are used in
-legitimate Mongolian script rendering.
-
-**Impact:** Applications processing Arabic or Mongolian text may lose rendering hints. If your
-application requires these characters, apply `clean()` selectively (e.g., sanitize user-facing
-fields but not body text known to contain these scripts), or write a custom post-processor that
-re-inserts them from a trusted source.
-
-### Latin Small Capitals and IPA Characters Are Not Mapped
-
-Characters like ᴀᴅᴍɪɴ (Latin Small Capitals, U+1D00--U+1D22) and ɑ (Latin Small Letter Alpha,
-U+0251) are visually similar to standard Latin letters but are classified as Latin script by
-Unicode. The homoglyph map targets cross-script confusables (Cyrillic, Greek, Armenian, Cherokee, Latin Extended, and typographic)
-where the script mismatch is the attack signal. Latin-to-Latin visual similarity is a different
-threat model better served by `detect_scripts()` and `is_mixed_script()` --- or by application-level
-character allowlisting for high-security contexts like username registration.
+### Resource Limits
+`walk(max_depth=...)` is an advisory warning threshold, not a limit. It warns once when a container is first reached at depth ≥ `max_depth` (the top-level container is depth 0) and keeps going; a container shared by several paths is measured where it is first reached. Bound input size and nesting where you parse it.
 
 ### Regex Escaping
-Use `re.escape()`. Regex metacharacter escaping is context-specific and already solved by the stdlib.
+Use `re.escape()`.
 
 ## Attack Vector Examples
 
-| Attack | Input | Output | Stages Fired |
-|--------|-------|--------|-------------|
+| Attack | Input | Output | Stages |
+|--------|-------|--------|--------|
 | Phishing domain | `pаypal.com` | `paypal.com` | Homoglyphs |
 | Zero-width evasion | `te\u200bst` | `test` | Invisibles |
 | Null truncation | `admin\x00.jpg` | `admin.jpg` | Null bytes |
 | Fullwidth bypass | `ａｄｍｉｎ` | `admin` | NFKC |
-| SSTI attempt | `{{ config }}` | `\{\{ config \}\}` | Escaper (jinja2) |
+| SSTI in template source | `{{ config }}` | `\{\{ config \}\}` | Escaper (jinja2) |
 | Path traversal | `../../../etc/passwd` | `etc/passwd` | Escaper (path) |
 | Tag smuggling | `\U000e0061\U000e0064\U000e006d\U000e0069\U000e006e` | *(empty)* | Invisibles |
 | Bidi override | `\u202eSSTI{{ x }}` | `SSTI\{\{ x \}\}` | Invisibles + Escaper |
-| Mixed: homoglyph + SSTI | `{{ cоnfig }}` | `\{\{ config \}\}` | Homoglyphs + Escaper |
-| Mixed: null + traversal | `../\x00../../passwd` | `passwd` | Null bytes + Escaper (path) |
+| Homoglyph + SSTI | `{{ cоnfig }}` | `\{\{ config \}\}` | Homoglyphs + Escaper |
+| Null + traversal | `../\x00../../passwd` | `passwd` | Null bytes + Escaper (path) |

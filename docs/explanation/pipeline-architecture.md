@@ -1,6 +1,6 @@
 # Pipeline Architecture
 
-Every string passed to `clean()` flows through six stages in strict order. Each of the five universal stages (1--5) is a deterministic function that returns the cleaned string and a change indicator (a count of affected codepoints). The escaper (stage 6, if provided) is a plain `str -> str` function. The pipeline orchestrator logs warnings when stages modify input.
+Every string passed to `clean()` flows through six stages in strict order. Each of the five universal stages (1--5) is a deterministic function that returns the cleaned string and a count of changes. The escaper (stage 6, if provided) is a plain `str -> str` function. `clean()` logs a warning, with the count, when a stage changes the input.
 
 ## Data Flow
 
@@ -157,8 +157,8 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 
 **Key properties:**
 - Only runs when Stage 4 actually replaced homoglyphs (zero cost for clean text)
-- Ensures `clean(clean(x)) == clean(x)` for all inputs
-- Does not produce a separate log message (the Stage 3 warning already covers NFKC)
+- Keeps `clean()` idempotent: `clean(clean(x)) == clean(x)`. This is checked exhaustively for every single code point and by property and fuzz tests, not proven for all strings
+- Does not produce a separate log message
 
 ---
 
@@ -170,13 +170,13 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 
 **Key properties:**
 - Runs **after** all universal stages
-- Output is **not** re-sanitized (no infinite loops, no double-escaping)
-- Must return `str` (raises `TypeError` otherwise)
+- Output is **not** re-sanitized; a custom escaper can reintroduce any character
+- Must return `str` (raises `TypeError` otherwise); exceptions it raises propagate
 - If `None`, the stage is skipped
 
 **Built-in escapers:**
-- `jinja2_escaper` --- escapes `{{ }}`, `{% %}`, `{# #}` template delimiters
-- `path_escaper` --- strips `../`, `./`, leading `/`, embedded `..`
+- `jinja2_escaper` --- backslash-escapes Jinja2's default delimiters `{{ }}`, `{% %}`, `{# #}`, including brace runs and overlapping sequences such as `{{%`
+- `path_escaper` --- lexical cleanup: strips `../`, `./`, leading `/` and embedded `..`; no filesystem checks
 
 See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for how to build your own.
 
@@ -194,9 +194,9 @@ The stage order is not arbitrary --- reordering breaks security guarantees.
 
 **Re-NFKC after homoglyphs:** Homoglyph replacement can leave Latin characters adjacent to combining marks that NFKC would compose into precomposed forms. Running NFKC again ensures the output is fully normalized and `clean()` is idempotent.
 
-**Homoglyphs before escaper:** The escaper operates on ASCII-normalized text. If homoglyphs remained, a Jinja2 escaper might miss `{{ cоnfig }}` (Cyrillic `о`) because the braces appear with a non-ASCII interior that doesn't match expected patterns.
+**Normalization before escaper:** Escapers match ASCII syntax. Fullwidth `｛｛` or `．．／` only become `{{` or `../` during NFKC, so an escaper that ran earlier would miss them.
 
-**Escaper last:** The escaper's output is context-specific and should not be altered by earlier stages. Re-sanitizing escaper output could break its escaping (e.g., backslash-escaped braces being re-processed).
+**Escaper last:** The escaper's output is context-specific and should not be altered by earlier stages. Re-sanitizing escaper output could change its escaping (e.g., the backslashes it inserts).
 
 ---
 

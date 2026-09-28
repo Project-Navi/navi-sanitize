@@ -14,13 +14,13 @@ uv add navi-sanitize
 
 Requires Python 3.12 or later. No external dependencies.
 
-## Quick Start by Use Case
+## Where to start
 
-**Building LLM pipelines?** User input flows into prompts, RAG context, and tool calls. Invisible Unicode encodes instructions tokenizers read but humans can't see. Start with [the LLM pipeline example](https://github.com/Project-Navi/navi-sanitize/blob/main/examples/llm_pipeline.py), then read [Pipeline Architecture](../explanation/pipeline-architecture.md) to understand what's stripped.
+**LLM pipelines.** Invisible characters and lookalikes can hide text from reviewers and keyword filters. Start with [the LLM pipeline example](https://github.com/Project-Navi/navi-sanitize/blob/main/examples/llm_pipeline.py) and [Pipeline Architecture](../explanation/pipeline-architecture.md). Sanitizing input does not stop prompt injection written in plain text.
 
-**Securing a web app?** Pydantic `AfterValidator` and FastAPI `Depends` give you one-line sanitization at the edge. See [the FastAPI/Pydantic example](https://github.com/Project-Navi/navi-sanitize/blob/main/examples/fastapi_pydantic.py) and the [Writing Custom Escapers](../how-to/writing-custom-escapers.md) guide.
+**Web apps.** Pydantic `AfterValidator` and FastAPI `Depends` give one-line sanitization at the edge; see [the FastAPI/Pydantic example](https://github.com/Project-Navi/navi-sanitize/blob/main/examples/fastapi_pydantic.py).
 
-**Evaluating for AppSec?** Start with the [Threat Model](../explanation/threat-model.md) --- it documents what's covered, what's not, and why. The [Character Reference](../reference/character-reference.md) has the complete tables. The [whitepaper PDF](https://github.com/Project-Navi/navi-sanitize/blob/main/docs/whitepaper/navi-sanitize-whitepaper.pdf) covers design rationale and testing methodology.
+**Security review.** Read the [Threat Model](../explanation/threat-model.md) and the [Character Reference](../reference/character-reference.md). The [whitepaper PDF](https://github.com/Project-Navi/navi-sanitize/blob/main/docs/whitepaper/navi-sanitize-whitepaper.pdf) is a March 2026 (v0.2.0) snapshot of the design rationale; where it differs from these pages, these pages describe current behavior.
 
 ## Basic Usage
 
@@ -29,137 +29,138 @@ Requires Python 3.12 or later. No external dependencies.
 ```python
 from navi_sanitize import clean
 
-# Homoglyph attack — Cyrillic а looks identical to Latin a
-clean("pаypal.com")  # "paypal.com"
+# Homoglyph: Cyrillic а looks identical to Latin a
+clean("pаypal.com")  # 'paypal.com'
 
 # Invisible characters hidden in text
-clean("te\u200bst")  # "test" — zero-width space removed
+clean("te\u200bst")  # 'test'
 
-# Null byte injection
-clean("file\x00.txt")  # "file.txt"
+# Null byte
+clean("file\x00.txt")  # 'file.txt'
 
-# Fullwidth encoding bypass
-clean("\uff41\uff44\uff4d\uff49\uff4e")  # "admin" — NFKC normalized
+# Fullwidth forms
+clean("\uff41\uff44\uff4d\uff49\uff4e")  # 'admin'
 ```
 
 ### Using Escapers
 
-Escapers run as the final pipeline stage, providing context-specific escaping after universal sanitization:
+An escaper runs last and prepares the cleaned text for one destination:
 
 ```python
-from navi_sanitize import clean, jinja2_escaper, path_escaper
+from navi_sanitize import clean, path_escaper
 
-# Jinja2 template injection prevention
-clean("{{ config }}", escaper=jinja2_escaper)
-# "\\{\\{ config \\}\\}"
+# Lexical path cleanup (not directory confinement)
+clean("../../../etc/passwd", escaper=path_escaper)  # 'etc/passwd'
+```
 
-# Path traversal prevention
-clean("../../../etc/passwd", escaper=path_escaper)
-# "etc/passwd"
+`jinja2_escaper` exists for the rare case where untrusted text must become part of Jinja2 template *source*. The normal, safer integration is to keep templates trusted and pass untrusted values as data; Jinja2 does not evaluate context values:
 
-# No escaper — universal stages only
-clean(user_input)
+```python
+from jinja2 import Environment
+from navi_sanitize import clean
+
+env = Environment(autoescape=True)
+template = env.from_string("Hello {{ name }}")
+template.render(name=clean(user_name))  # the value is data, never template code
 ```
 
 ### Sanitizing Nested Data
 
-Use `walk()` to recursively sanitize every string in a dict/list structure:
+`walk()` sanitizes every string in a dict/list structure, including dict keys:
 
 ```python
-from navi_sanitize import walk, jinja2_escaper
+from navi_sanitize import walk
 
 untrusted = {
-    "name": "pаypal",         # Cyrillic а
+    "name": "pаypal",          # Cyrillic а
     "paths": ["../secret", "safe.txt"],
-    "count": 42,              # non-strings pass through
+    "count": 42,               # non-strings pass through
     "nested": {
-        "value": "te\u200bst" # zero-width space
-    }
+        "value": "te\u200bst"  # zero-width space
+    },
 }
 
 clean_data = walk(untrusted)
-# {
-#     "name": "paypal",
-#     "paths": ["../secret", "safe.txt"],
-#     "count": 42,
-#     "nested": {"value": "test"}
-# }
+# {'name': 'paypal', 'paths': ['../secret', 'safe.txt'], 'count': 42, 'nested': {'value': 'test'}}
 ```
 
-`walk()` returns a deep copy --- the original data is never modified.
+The input is never modified. `walk()` builds new dicts and lists (subclasses such as `OrderedDict` come back as plain `dict`/`list`) and shares every other object with the input:
 
-**Type behavior:**
 - `str` --- sanitized through the full pipeline
-- `dict` --- keys and values sanitized recursively
-- `list` --- elements sanitized recursively
-- `int`, `float`, `bool`, `None`, `bytes`, `tuple`, `set` --- passed through unchanged
+- `dict` --- keys and values sanitized
+- `list` --- elements sanitized
+- `tuple`, `set`, `frozenset`, `bytes`, numbers, `None`, other objects --- returned as-is, not traversed
+
+If two keys sanitize to the same string, the last value wins and a warning with the collision count is logged. Validate keys yourself where distinct key identity matters.
 
 ## Logging
 
-navi-sanitize uses Python's standard `logging` module. The library registers a `NullHandler` by default (per library best practice), so no output appears unless you configure logging:
+navi-sanitize logs to the `navi_sanitize` logger and registers a `NullHandler`, so nothing appears until you configure logging:
 
 ```python
 import logging
 
-# See all sanitization warnings
 logging.basicConfig(level=logging.WARNING)
 
 from navi_sanitize import clean
 
 clean("pаypal.com")
 # WARNING:navi_sanitize:Replaced 1 homoglyph(s) in value
-# Returns: "paypal.com"
 ```
 
-Warnings include counts for traceability:
-- `"Removed 2 null byte(s) from value"`
-- `"Stripped 3 invisible character(s) from value"`
-- `"Normalized 1 fullwidth/compatibility character(s) in value"`
-- `"Replaced 1 homoglyph(s) in value"`
+Messages carry counts only, never input text:
 
-To capture warnings programmatically:
+- `Removed 2 null byte(s) from value`
+- `Stripped 3 invisible character(s) from value`
+- `Normalized 1 fullwidth/compatibility character(s) in value`
+- `Replaced 1 homoglyph(s) in value`
+- `Decoded 2 encoding layer(s) from value` (from `decode_evasion()`)
+- `walk() dict key collision: 1 key(s) sanitized to an existing key; last value kept`
+- `walk() input exceeds max_depth=128; continuing to sanitize`
+
+All are `WARNING` level. High-volume callers can configure the library logger like any other. For example, drop the per-value messages but keep the `walk()` warnings:
 
 ```python
 import logging
 
-logger = logging.getLogger("navi_sanitize")
-logger.setLevel(logging.WARNING)
-logger.addHandler(logging.StreamHandler())
+class KeepWalkWarnings(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.getMessage().startswith("walk()")
+
+logging.getLogger("navi_sanitize").addFilter(KeepWalkWarnings())
 ```
+
+Or silence it entirely with `logging.getLogger("navi_sanitize").setLevel(logging.ERROR)`.
 
 ## Opt-in Utilities
 
-**These utilities are not part of `clean()` and are never run automatically.** They are standalone functions you compose with the pipeline yourself.
+**These are not part of `clean()` and never run automatically.**
 
-### Decoding Nested Evasion
+### Decoding Nested Encodings
 
-Attackers nest URL, HTML entity, and hex encodings to sneak payloads past single-layer decoders. `decode_evasion()` peels these layers iteratively before `clean()` runs:
+`decode_evasion()` peels URL percent-encoding, HTML entities and `\xHH` escapes, up to three passes by default. It does not decode base64 or other formats.
 
 ```python
-from navi_sanitize import decode_evasion, clean, path_escaper
+from navi_sanitize import clean, decode_evasion, path_escaper
 
-# Double-encoded path traversal
-raw = "%252e%252e%252fetc%252fpasswd"
+raw = "%252e%252e%252fetc%252fpasswd"   # double-encoded "../etc/passwd"
 
-# 1. Peel encoding layers
-peeled = decode_evasion(raw)                    # "../../etc/passwd"
-
-# 2. Sanitize
-cleaned = clean(peeled, escaper=path_escaper)   # "etc/passwd"
+peeled = decode_evasion(raw)                    # '../etc/passwd'
+cleaned = clean(peeled, escaper=path_escaper)   # 'etc/passwd'
 ```
 
 ### Mixed-Script Detection
 
-`detect_scripts()` returns the script buckets present in a string. `is_mixed_script()` is a convenience wrapper that returns `True` when two or more scripts are found --- useful for flagging homoglyph-based phishing:
+`detect_scripts()` returns the set of script buckets it recognizes in a string; `is_mixed_script()` is `True` when there are two or more:
 
 ```python
 from navi_sanitize import detect_scripts, is_mixed_script
 
-detect_scripts("paypal.com")   # {"latin"}
-detect_scripts("pаypal.com")  # {"latin", "cyrillic"} — Cyrillic а
+detect_scripts("paypal.com")   # {'latin'}
+detect_scripts("pаypal.com")   # {'latin', 'cyrillic'}
 
 is_mixed_script("paypal.com")  # False
-is_mixed_script("pаypal.com") # True — phishing candidate
+is_mixed_script("pаypal.com")  # True
 ```
 
-Detection is most useful on **raw** input (before `clean()`), since `clean()` replaces homoglyphs and the mixed-script signal disappears.
+Run detection on **raw** input: `clean()` replaces mapped homoglyphs, which removes the signal. It is a heuristic over eight buckets, not a Unicode script classifier.
