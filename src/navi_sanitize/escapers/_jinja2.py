@@ -7,7 +7,8 @@ import re
 
 # Each match is a maximal chain of overlapping delimiters ("{{%", "{%}", "%}}"),
 # so no raw delimiter can form between an escaped character and the next one.
-_JINJA2_ESCAPE_RE = re.compile(r"\{+[%#]\}*|\{{2,}|[%#]\}+|\}{2,}")
+# Factored after the leading "{" so plain "{{" runs do not backtrack.
+_JINJA2_ESCAPE_RE = re.compile(r"\{(?:\{+(?:[%#]\}*)?|[%#]\}*)|[%#]\}+|\}{2,}")
 
 
 def _escape_match(m: re.Match[str]) -> str:
