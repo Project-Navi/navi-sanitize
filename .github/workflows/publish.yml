@@ -27,8 +27,19 @@ jobs:
       id-token: write
       attestations: write
 
-  publish:
+  # Checks the exact downloaded release dist (tag/version, contents, installed
+  # behavior, sdist rebuild) before anything is uploaded. Read-only.
+  verify-dist:
     needs: [build]
+    uses: ./.github/workflows/verify-dist.yml
+    with:
+      artifact-name: dist
+      tag-name: ${{ github.event.release.tag_name }}
+    permissions:
+      contents: read
+
+  publish:
+    needs: [verify-dist]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: pypi

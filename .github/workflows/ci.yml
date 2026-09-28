@@ -27,9 +27,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Ruff check
-        run: uv run ruff check src/ tests/
+        run: uv run ruff check src/ tests/ scripts/
       - name: Ruff format
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/ scripts/
 
   # ── Required check: typecheck ───────────────────────────────────────
   # CONTRACT: org ruleset requires this exact check name
@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Mypy
-        run: uv run mypy --strict src/navi_sanitize/
+        run: uv run mypy --strict src/navi_sanitize/ scripts/verify_dist.py
 
   # ── Test matrix (NOT a required check) ──────────────────────────────
   test-run:
@@ -127,8 +127,9 @@ jobs:
 
   # ── Required check: quality-gate ────────────────────────────────────
   # CONTRACT: org ruleset requires this exact check name
+  # Fails unless every prerequisite succeeded (failed, cancelled and skipped all fail).
   quality-gate:
-    needs: [test, lint, typecheck, security]
+    needs: [test, lint, typecheck, security, build, verify-dist]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -139,14 +140,16 @@ jobs:
             "${{ needs.test.result }}" \
             "${{ needs.lint.result }}" \
             "${{ needs.typecheck.result }}" \
-            "${{ needs.security.result }}"; do
+            "${{ needs.security.result }}" \
+            "${{ needs.build.result }}" \
+            "${{ needs.verify-dist.result }}"; do
             if [ "$result" != "success" ]; then
               echo "::error::Required job failed: $result"
               exit 1
             fi
           done
 
-  # ── Non-required: build smoke test ──────────────────────────────────
+  # ── Build the candidate wheel and sdist ─────────────────────────────
   build:
     needs: [lint, typecheck, test, security]
     runs-on: ubuntu-latest
@@ -155,19 +158,17 @@ jobs:
       - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           enable-cache: true
-      - name: Build wheel
+      - name: Build wheel and sdist
         run: uv build
-      - name: Smoke test
-        run: |
-          uv venv .smoke-venv
-          uv pip install dist/*.whl --python .smoke-venv/bin/python
-          .smoke-venv/bin/python -c "
-          from navi_sanitize import clean, walk, jinja2_escaper, path_escaper
-          assert clean('hello') == 'hello'
-          assert walk({'k': 'v'}) == {'k': 'v'}
-          print('Smoke test passed')
-          "
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: wheel
-          path: dist/*.whl
+          name: ci-dist
+          path: dist/
+          if-no-files-found: error
+
+  # ── Verify the exact built artifacts (same job the publish path runs) ──
+  verify-dist:
+    needs: [build]
+    uses: ./.github/workflows/verify-dist.yml
+    with:
+      artifact-name: ci-dist

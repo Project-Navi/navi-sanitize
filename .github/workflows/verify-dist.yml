@@ -1,0 +1,48 @@
+name: Verify dist
+
+# Package-specific verification of an already-built wheel + sdist artifact.
+# Called by CI for every PR/push and by the publish workflow before upload,
+# so the same job checks both the candidate and the actual release bytes.
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: "Artifact holding exactly one wheel and one sdist"
+        required: true
+        type: string
+      tag-name:
+        description: "Release tag the version must match (empty outside releases)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  verify-dist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/dist
+      - name: Verify wheel and sdist
+        env:
+          DIST_DIR: ${{ runner.temp }}/dist
+          TAG_NAME: ${{ inputs.tag-name }}
+        run: |
+          args=("$DIST_DIR" --report "$RUNNER_TEMP/verify-dist.json")
+          if [ -n "$TAG_NAME" ]; then args+=(--tag "$TAG_NAME"); fi
+          uv run --no-project --python 3.12 python scripts/verify_dist.py "${args[@]}"
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: ${{ inputs.artifact-name }}-verification
+          path: ${{ runner.temp }}/verify-dist.json
+          if-no-files-found: error

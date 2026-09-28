@@ -22,5 +22,5 @@ repos:
     rev: a66e98df7b4aeeb3724184b332785976d062b92e  # v1.19.1
     hooks:
       - id: mypy
-        args: [--strict, src/navi_sanitize/]
+        args: [--strict, src/navi_sanitize/, scripts/verify_dist.py]
         pass_filenames: false
