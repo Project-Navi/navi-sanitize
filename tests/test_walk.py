@@ -453,6 +453,35 @@ class TestWalkKeyCollisions:
         assert list(result) == [k1, k2]
         assert list(result.values()) == ["a", "b"]
 
+    def test_collision_count_does_not_call_subclass_len(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """walk() iterates dict subclasses via items(); it must not depend on their __len__."""
+        from navi_sanitize import walk
+
+        class NoLen(dict[str, object]):
+            def __len__(self) -> int:
+                raise TypeError("no len")
+
+        class HidesPrivate(dict[str, object]):
+            def items(self):  # type: ignore[override]
+                return [(k, v) for k, v in super().items() if not k.startswith("_")]
+
+        class Overcounts(dict[str, object]):
+            def __len__(self) -> int:
+                return super().__len__() + 5
+
+        with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
+            result = walk(
+                {
+                    "a": NoLen(x="1\u200b"),
+                    "b": HidesPrivate(pub=1, _secret=2),
+                    "c": Overcounts(y=2),
+                }
+            )
+        assert result == {"a": {"x": "1"}, "b": {"pub": 1}, "c": {"y": 2}}
+        assert not _collision_records(caplog)
+
 
 class TestWalkDepthSemantics:
     """max_depth is an advisory threshold on first-discovery depth."""

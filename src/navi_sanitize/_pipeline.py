@@ -224,11 +224,14 @@ def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) ->
                     max_depth,
                 )
                 depth_warned = True
+            assigned = 0
             for k, v in orig_d.items():
                 new_k = clean(k, escaper=escaper) if isinstance(k, str) else k
                 copy_d[new_k] = _resolve(v, depth)
-            # Counted afterwards so the copy loop does no extra key lookups.
-            collisions = len(orig_d) - len(copy_d)
+                assigned += 1
+            # Assignments that did not add a key overwrote one. Uses only the
+            # plain copy, never a subclass's __len__, and no extra key lookups.
+            collisions = assigned - len(copy_d)
             if collisions:
                 logger.warning(
                     "walk() dict key collision: %d key(s) sanitized to an existing key; "
