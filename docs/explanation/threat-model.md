@@ -58,7 +58,7 @@ navi-sanitize is a deterministic text sanitization library. It removes and norma
 ### Multi-Encoding Evasion (opt-in)
 **Vector:** Nested URL, HTML entity and `\xHH` encodings (`%252e%252e%252f`, `&amp;lt;`) that single-layer decoders miss.
 **Example:** `"%252e%252e%252fetc%252fpasswd"` decodes to `"../etc/passwd"` in two passes.
-**Mitigation:** `decode_evasion()` runs URL → HTML entity → hex decoding per pass, up to `max_layers` passes (default 3). Invalid percent bytes stay as `%XX` text. Compose it yourself: `clean(decode_evasion(raw), escaper=path_escaper)`.
+**Mitigation:** `decode_evasion()` runs URL → HTML entity → hex decoding per pass, up to `max_layers` passes (default 3). Invalid percent bytes stay as `%XX` text; HTML references follow HTML5 rules, which replace or drop some invalid ones. Compose it yourself: `clean(decode_evasion(raw), escaper=path_escaper)`.
 
 ### Mixed-Script Detection (opt-in)
 **Signal:** `detect_scripts()` and `is_mixed_script()` report when text mixes script buckets (Latin, Cyrillic, Greek, Arabic, Hebrew, Armenian, Cherokee, CJK), a common sign of homoglyph spoofing. They do not modify text, and scripts outside those buckets are ignored. Use them on **raw** input; `clean()` removes the signal.

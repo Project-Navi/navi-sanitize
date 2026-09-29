@@ -340,6 +340,9 @@ def smoke(version: str) -> dict[str, str]:
     check(ns.clean("../../etc/passwd", escaper=ns.path_escaper) == "etc/passwd", "path escaper")
     check(ns.decode_evasion("%252e%252e%252fetc%252fpasswd") == "../etc/passwd", "decode")
     check(ns.decode_evasion("\ud800%41") == "\ud800A", "decode surrogate")
+    long_ref = "&#" + "0" * 4301 + "65;"  # past the default int-string limit
+    check(ns.decode_evasion(long_ref) == "A", "decode long decimal reference")
+    check(ns.decode_evasion("&#38;#65;", max_layers=1) == "&#65;", "decode one pass")
     check(ns.detect_scripts("a\u0430") == {"latin", "cyrillic"}, "detect_scripts")
     check(ns.is_mixed_script("a\u0430") and not ns.is_mixed_script("abc"), "is_mixed_script")
     escaper: ns.Escaper = str.upper

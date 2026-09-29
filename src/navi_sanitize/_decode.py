@@ -24,6 +24,12 @@ MAX_DECODE_LAYERS: int = 3
 
 _HEX_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
 _PERCENT_RUN_RE = re.compile(r"(?:%[0-9a-fA-F]{2})+")
+# Decimal character references with more digits than any code point needs.
+# html.unescape converts the digits with int(), which raises ValueError past
+# the interpreter's int-string limit (4300 digits by default).
+_LONG_DECIMAL_REF_RE = re.compile(r"&#([0-9]{8,})")
+_MAX_CODE_POINT_DIGITS = len(str(0x10FFFF))
+_OUT_OF_RANGE_DECIMAL = str(0x10FFFF + 1)  # html.unescape maps it to U+FFFD
 
 
 def _decode_percent_run(m: re.Match[str]) -> str:
@@ -49,9 +55,24 @@ def _decode_url(s: str) -> str:
     return _PERCENT_RUN_RE.sub(_decode_percent_run, s)
 
 
+def _bound_decimal_ref(m: re.Match[str]) -> str:
+    """Rewrite a long decimal reference to a short one with the same HTML5 meaning."""
+    digits = m.group(1).lstrip("0") or "0"
+    if len(digits) > _MAX_CODE_POINT_DIGITS:
+        digits = _OUT_OF_RANGE_DECIMAL
+    return "&#" + digits
+
+
 def _decode_html_entities(s: str) -> str:
-    """Decode HTML/XML character entities."""
-    return html.unescape(s)
+    """Decode HTML character references with Python's HTML5 rules, in one pass.
+
+    Only the digits of over-long decimal references are rewritten first
+    (leading zeros dropped, out-of-range values clamped to an out-of-range
+    value), so html.unescape never converts more than 7 digits. The rewrite
+    matches exactly the spans html.unescape treats as decimal references and
+    leaves their terminators alone, so it decodes nothing by itself.
+    """
+    return html.unescape(_LONG_DECIMAL_REF_RE.sub(_bound_decimal_ref, s))
 
 
 def _decode_hex_escapes(s: str) -> str:
@@ -74,8 +95,11 @@ def decode_evasion(text: str, *, max_layers: int = MAX_DECODE_LAYERS) -> str:
     Logs a warning with the layer count when decoding occurs. Never
     includes decoded content in log messages.
 
-    Never errors on invalid or partial encodings — they pass through
-    unchanged. Raises ``TypeError`` if *text* is not a ``str``.
+    Does not raise on any string content, however long. Undecodable
+    percent bytes stay as ``%XX`` text and malformed ``\\x`` escapes are left
+    alone. HTML references follow Python's HTML5 rules (``html.unescape``):
+    some invalid ones become U+FFFD or are removed rather than kept.
+    Raises ``TypeError`` if *text* is not a ``str``.
     """
     if not isinstance(text, str):
         raise TypeError(f"decode_evasion() requires str, got {type(text).__name__}")

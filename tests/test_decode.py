@@ -6,7 +6,9 @@ from __future__ import annotations
 import html
 import logging
 import re
+import sys
 import urllib.parse
+from collections.abc import Iterator
 
 import hypothesis.strategies as st
 import pytest
@@ -183,7 +185,25 @@ class TestDecodeLiteralSurrogates:
 
     @given(
         text=st.lists(
-            st.sampled_from(["%", "C3", "A9", "E2", "82", "AC", "FF", "80", "2", "&#", ";", "é"])
+            st.sampled_from(
+                [
+                    "%",
+                    "C3",
+                    "A9",
+                    "E2",
+                    "82",
+                    "AC",
+                    "FF",
+                    "80",
+                    "2",
+                    "&#",
+                    ";",
+                    "é",
+                    "0",
+                    "65",
+                    "&#x",
+                ]
+            )
             | st.characters(codec="utf-8"),
             max_size=40,
         ).map("".join)
@@ -255,3 +275,87 @@ class TestDecodeIntegration:
         cleaned = clean(decoded)
         scripts = detect_scripts(cleaned)
         assert scripts == {"latin"}
+
+
+@pytest.fixture(params=[4300, 640], ids=["limit4300", "limit640"])
+def int_digit_limit(request: pytest.FixtureRequest) -> Iterator[int]:
+    """Run at the default and minimum int-string limits; the library must not change them."""
+    old = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(request.param)
+    try:
+        yield request.param
+    finally:
+        assert sys.get_int_max_str_digits() == request.param, "decoder changed the global limit"
+        sys.set_int_max_str_digits(old)
+
+
+@pytest.mark.usefixtures("int_digit_limit")
+class TestLongDecimalReferences:
+    """Decimal references longer than the interpreter's int-conversion limit must not raise."""
+
+    def test_long_out_of_range_decimal(self) -> None:
+        assert decode_evasion("&#" + "9" * 4301 + ";") == "\ufffd"
+
+    def test_long_zero_padded_valid_decimal(self) -> None:
+        assert decode_evasion("&#" + "0" * 4301 + "65;") == "A"
+
+    def test_semicolonless_long_reference(self) -> None:
+        assert decode_evasion("&#" + "0" * 4301 + "65") == "A"
+
+    def test_mixed_references_and_surrogate(self) -> None:
+        value = "\ud800%42&#" + "0" * 4301 + "65;&amp;%FF"
+        assert decode_evasion(value, max_layers=1) == "\ud800BA&%FF"
+
+    def test_url_exposes_long_reference_in_same_pass(self) -> None:
+        assert decode_evasion("%26%23" + "0" * 4301 + "65%3B", max_layers=1) == "A"
+
+    def test_html_exposes_reference_on_next_pass(self) -> None:
+        entity = "&#" + "0" * 4301 + "65;"
+        wrapped = "&amp;" + entity[1:]
+        assert decode_evasion(wrapped, max_layers=1) == entity
+        assert decode_evasion(wrapped, max_layers=2) == "A"
+
+    def test_no_accidental_double_html_decoding(self) -> None:
+        assert decode_evasion("&#38;#65;", max_layers=1) == "&#65;"
+        assert decode_evasion("&#38;#65;", max_layers=2) == "A"
+        assert decode_evasion("&#" + "0" * 4301 + "38;#65;", max_layers=1) == "&#65;"
+
+    def test_nonpositive_layers_still_no_op(self) -> None:
+        value = "&#" + "9" * 4301 + ";"
+        for layers in (0, -1):
+            assert decode_evasion(value, max_layers=layers) == value
+
+    def test_html5_invalid_reference_semantics_preserved(self) -> None:
+        assert decode_evasion("&#0;&#xD800;&#1114112;", max_layers=1) == "\ufffd" * 3
+        assert decode_evasion("&#128;", max_layers=1) == "\u20ac"
+        assert decode_evasion("&#" + "0" * 4301 + "128;", max_layers=1) == "\u20ac"
+        assert decode_evasion("a&#1;b", max_layers=1) == "ab"  # HTML5 drops some code points
+
+    def test_long_hex_still_handled(self) -> None:
+        assert decode_evasion("&#x" + "F" * 5000 + ";", max_layers=1) == "\ufffd"
+
+    def test_surrogate_and_malformed_percent_policy_preserved(self) -> None:
+        assert decode_evasion("\ud800%41%FF") == "\ud800A%FF"
+
+    def test_logging_does_not_leak_reference_content(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        secret = "NS_PRIVATE_SENTINEL"
+        with caplog.at_level(logging.DEBUG, logger="navi_sanitize"):
+            assert decode_evasion(secret + "&#" + "0" * 4301 + "65;") == secret + "A"
+        assert caplog.records
+        for record in caplog.records:
+            assert secret not in record.getMessage() + repr(record.args)
+
+
+class TestDecimalReferenceEquivalence:
+    """Where html.unescape itself can convert, padded references decode exactly as it does."""
+
+    @pytest.mark.parametrize(
+        "value", ["0", "9", "65", "128", "1114111", "1114112", "9999999", "99999999", "38"]
+    )
+    @pytest.mark.parametrize("zeros", [0, 1, 7, 12])
+    @pytest.mark.parametrize("tail", [";", "", "x;", ";;", "&#65;"])
+    def test_matches_html_unescape(self, value: str, zeros: int, tail: str) -> None:
+        text = "<&#" + "0" * zeros + value + tail + ">"
+        assert decode_evasion(text, max_layers=1) == html.unescape(text)

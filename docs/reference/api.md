@@ -233,7 +233,8 @@ Iteratively decode nested URL, HTML entity, and hex escape encodings from a stri
 - A pass counts as one layer if the output differs from the input
 - Stops when a pass produces no change or `max_layers` is reached
 - `max_layers <= 0` is a no-op (returns `text` unchanged)
-- Invalid or partial encodings do not raise --- they pass through unchanged, and undecodable percent bytes stay as `%XX` text
+- Does not raise on string content of any length. Undecodable percent bytes stay as `%XX` text and malformed `\xHH` escapes are left alone
+- HTML references follow Python's HTML5 rules (`html.unescape`), so some invalid references are replaced or dropped rather than kept: `&#0;` and out-of-range values such as `&#1114112;` become U+FFFD, `&#128;` becomes `€`, and some control-character references are removed. Decimal references of any length are handled (leading zeros are ignored)
 - Literal characters, including lone surrogates, are never re-encoded; only `%XX` runs are percent-decoded
 - Decodes only these three formats; base64 and other encodings are left alone
 - Logs a warning with the layer count when decoding occurs; never includes decoded content in log messages
