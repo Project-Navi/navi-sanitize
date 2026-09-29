@@ -68,14 +68,14 @@ Documentation = "https://docs.projectnavi.ai/navi-sanitize"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-benchmark>=5.0.0",
-    "hypothesis>=6.0.0",
-    "ruff>=0.9.0",
-    "mypy>=1.8.0",
+    "pytest>=9.1.1",
+    "pytest-benchmark>=5.3.0",
+    "hypothesis>=6.168.0",
+    "ruff>=0.16.8",
+    "mypy>=2.3.1",
 ]
 docs = [
-    "zensical>=0.0.24",
+    "zensical>=0.0.63",
 ]
 
 [tool.ruff]
