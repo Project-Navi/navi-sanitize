@@ -21,7 +21,8 @@ uv run ruff format --check src/ tests/ scripts/
 uv run mypy --strict src/navi_sanitize/ scripts/
 uv run pytest tests/ -v --benchmark-disable          # Python 3.12 and 3.13 in CI
 
-# Docs: builds from a filtered copy of docs/, then checks pages, search, links
+# Docs: builds from a filtered copy of docs/, checks pages, search and links in staging,
+# then replaces --out (site/, or a new, empty or previously generated directory outside the checkout)
 uv sync --group docs && uv run python scripts/build_docs.py --out site
 
 # Distribution: exact wheel + sdist, installed behavior, sdist rebuild
