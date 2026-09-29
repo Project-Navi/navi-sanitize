@@ -22,9 +22,11 @@ on:
     tags:
       - "v[0-9]*.[0-9]*.[0-9]*"
 
-# One release at a time across all tags; never cancel an in-flight publish.
+# One pipeline per tag; never cancel an in-flight publish. Per-tag groups stop a later
+# tag push (even a malformed one) from replacing a queued release. Two versions cannot
+# both publish: the tag must be the current main HEAD and match the package version.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -53,9 +55,37 @@ jobs:
             echo "ok=true" >> "$GITHUB_OUTPUT"
             echo "version=${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::$TAG_NAME is not a stable vMAJOR.MINOR.PATCH tag; skipping release."
+            echo "::notice::the pushed tag is not a stable vMAJOR.MINOR.PATCH tag; skipping release."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Require a signed annotated tag on the pushed commit
+        # `gh release create --verify-tag` only checks that the tag exists.
+        if: steps.semver.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ref="$(gh api "repos/${REPO}/git/ref/tags/${TAG_NAME}")"
+          if [ "$(jq -r '.object.type' <<<"$ref")" != "tag" ]; then
+            echo "::error::release tags must be signed annotated tags; this is a lightweight tag"
+            exit 1
+          fi
+          tag="$(gh api "repos/${REPO}/git/tags/$(jq -r '.object.sha' <<<"$ref")")"
+          verified="$(jq -r '.verification.verified' <<<"$tag")"
+          reason="$(jq -r '.verification.reason' <<<"$tag")"
+          target="$(jq -r '.object.sha' <<<"$tag")"
+          if [ "$verified" != "true" ]; then
+            echo "::error::the tag signature is not verified by GitHub (${reason})"
+            exit 1
+          fi
+          if [ "$target" != "$SHA" ]; then
+            echo "::error::the tag points at ${target}, not the pushed commit ${SHA}"
+            exit 1
+          fi
+          echo "signed tag verified (${reason}) on ${SHA}"
 
   require-ci-green:
     # The tag must point at the current main HEAD, and every workflow that runs on
@@ -214,7 +244,7 @@ jobs:
               sys.exit(f"::error::CHANGELOG.md section for {version} is not dated: {match.group(1)!r}")
           Path("RELEASE_NOTES.md").write_text(match.group(2).strip() + "\n", encoding="utf-8")
           PY
-      - name: Create the draft GitHub Release
+      - name: Create (or, on a re-run, reuse) the draft GitHub Release
         # Draft so assets and provenance are staged first; `publish-github-release`
         # un-drafts only after PyPI accepted the files. `--verify-tag` ties it to this tag.
         env:
@@ -222,11 +252,24 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG_NAME" \
-            --draft \
-            --verify-tag \
-            --title "$TAG_NAME" \
-            --notes-file RELEASE_NOTES.md
+          set -euo pipefail
+          if is_draft="$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft 2>"$RUNNER_TEMP/view.err")"; then
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::a published release already exists for this tag; refusing to change it"
+              exit 1
+            fi
+            echo "reusing the existing draft release"
+            gh release edit "$TAG_NAME" --title "$TAG_NAME" --notes-file RELEASE_NOTES.md
+          elif grep -q "release not found" "$RUNNER_TEMP/view.err"; then
+            gh release create "$TAG_NAME" \
+              --draft \
+              --verify-tag \
+              --title "$TAG_NAME" \
+              --notes-file RELEASE_NOTES.md
+          else
+            cat "$RUNNER_TEMP/view.err" >&2
+            exit 1
+          fi
 
   build:
     name: build wheel + sdist + SBOMs
@@ -451,6 +494,10 @@ jobs:
         with:
           packages-dir: dist
           print-hash: true
+          # A re-run after a successful upload must reach the hash check below
+          # instead of failing on files PyPI already has. Skipping is safe only
+          # because that check then requires PyPI to serve exactly these bytes.
+          skip-existing: true
       - name: Verify PyPI serves exactly the staged files
         env:
           VERSION: ${{ needs.guard.outputs.version }}

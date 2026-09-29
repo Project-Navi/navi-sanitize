@@ -62,7 +62,7 @@ CI pins uv (`version:` on each `setup-uv` step) and uses Python 3.12 outside the
 
 ## Releases
 
-Maintainers only. Set the version in `pyproject.toml` and `src/navi_sanitize/__init__.py`, run `uv lock`, and add a dated `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` (it becomes the release notes). Once that is merged and CI on `main` is green, push a signed `vX.Y.Z` tag on the `main` HEAD. `publish.yml` then checks the tag and that commit's CI, builds, runs `verify-dist`, attests and generates SLSA provenance, stages everything on a draft GitHub Release, waits for approval on the `pypi` environment, publishes with Trusted Publishing, confirms PyPI serves the same files, and publishes the Release. If a job fails the Release stays a draft; fix the cause and re-run the failed job. Docs deploy from `main` via `docs.yml`.
+Maintainers only. Set the version in `pyproject.toml` and `src/navi_sanitize/__init__.py`, run `uv lock`, and add a dated `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` (it becomes the release notes). Once that is merged and CI on `main` is green, push a signed annotated `vX.Y.Z` tag (`git tag -s`) on the `main` HEAD; lightweight or unverified tags fail. `publish.yml` then checks the tag and that commit's CI, builds, runs `verify-dist`, attests and generates SLSA provenance, stages everything on a draft GitHub Release, waits for approval on the `pypi` environment, publishes with Trusted Publishing, confirms PyPI serves the same files, and publishes the Release. If a job fails the Release stays a draft; fix the cause and re-run the failed job. Docs deploy from `main` via `docs.yml`.
 
 ## Reporting Bugs
 
