@@ -43,7 +43,7 @@ Prepared maintenance release; not yet published. No exports, signatures, default
 - The publish job uses `pypa/gh-action-pypi-publish` v1.14.2 (twine 7.0.0, packaging 26.2); the previous pin (v1.13.0, packaging 25.0) rejects the Metadata-Version 2.5 that the build emits. `verify-dist` now runs `twine check --strict` on both artifacts inside that same publisher image, offline and without its upload entrypoint, and a test keeps the two pins identical.
 - `scripts/build_docs.py` refuses an `--out` that is the checkout, one of its parents, anything inside it other than `site/`, a symlink, or a non-empty directory that is not a site it generated. The staged site is checked before the previous one is replaced.
 - Removed the Grippy review workflow and the dormant CodeQL workflow.
-- Dependabot uses the `uv` ecosystem, so version updates change `uv.lock` together with `pyproject.toml`; the lock is re-synced with the raised development floors. The docs check accepts the theme's `#__skip` link on pages without headings (zensical 0.0.66).
+- Dependabot uses the `uv` ecosystem, so version updates change `uv.lock` together with `pyproject.toml`; the lock is re-synced with the raised development floors. The docs check accepts zensical 0.0.66's `#__skip` skip link only on pages without a heading anchor (the 404 page); any other `#__skip` link must resolve.
 
 ### Testing
 

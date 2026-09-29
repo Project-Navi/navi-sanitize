@@ -35,9 +35,10 @@ from urllib.parse import urlsplit
 
 EXCLUDED_SOURCES = ("plans", "internal", "whitepaper")
 FORBIDDEN_SUFFIXES = (".md", ".tex", ".pdf", ".gitkeep", ".gitignore", ".py")
-# zensical's skip link targets the page's first heading; on a page without one (404.html)
-# it falls back to "#__skip", which no element carries.
+# zensical's skip link (a.md-skip) targets the page's first heading anchor; on a page
+# without one (404.html) it falls back to "#__skip", which no element carries.
 THEME_SKIP_LINK = "#__skip"
+HEADINGS = ("h1", "h2", "h3", "h4", "h5", "h6")
 
 
 class DocsCheckError(Exception):
@@ -147,15 +148,23 @@ class _Page(HTMLParser):
         super().__init__()
         self.ids: set[str] = set()
         self.links: list[str] = []
+        self.heading_ids: set[str] = set()
+        self.theme_skip_links: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        classes = next((v or "" for n, v in attrs if n == "class"), "").split()
         for name, value in attrs:
             if value is None:
                 continue
             if name in ("id", "name"):
                 self.ids.add(value)
+                if tag in HEADINGS:
+                    self.heading_ids.add(value)
             elif name in ("href", "src"):
-                self.links.append(value)
+                if tag == "a" and value == THEME_SKIP_LINK and "md-skip" in classes:
+                    self.theme_skip_links.append(value)
+                else:
+                    self.links.append(value)
 
 
 def _target_file(site: Path, page_url: str, link_path: str) -> Path:
@@ -191,9 +200,9 @@ def check_site(site: Path, config: dict[str, object]) -> dict[str, object]:
         parsed[rel] = parser
     links = 0
     for rel, page in parsed.items():
-        for link in page.links:
-            if link == THEME_SKIP_LINK:
-                continue
+        # The theme's fallback is expected only where there is no heading anchor to target.
+        skip_links = page.theme_skip_links if page.heading_ids else []
+        for link in page.links + skip_links:
             parts = urlsplit(link)
             if parts.scheme or parts.netloc or link.startswith("mailto:"):
                 continue
