@@ -14,6 +14,7 @@ Prepared maintenance release; not yet published. No exports, signatures, default
 - `path_escaper`: deleting embedded `..` could leave a new `.` segment (`"..."` gave `"."`, `".../file"` gave `"./file"`), so a second call changed the result again. Such segments are now dropped; other output is unchanged (`"file..txt"` still gives `"filetxt"`).
 - `jinja2_escaper`: overlapping sequences such as `{{%`, `{%}`, `{{#` and `%}}` left a raw default delimiter next to an escaped character (`"{{%"` gave `\{\{%`, which still contains `{%`). Overlapping chains are now escaped whole; output differs only where it previously contained a raw delimiter.
 - `decode_evasion`: a literal lone surrogate anywhere in the input raised `UnicodeEncodeError`. Only `%XX` runs are now decoded and literal text is left as is; results for other input are unchanged.
+- `decode_evasion`: a decimal HTML reference with more digits than Python's integer-string limit (4300 by default, e.g. `"&#" + "9" * 4301 + ";"`, or a long run of leading zeros) raised `ValueError` in every released version. Such references are now bounded before the single `html.unescape` pass and decode as that pass would; the interpreter's digit limit is not changed.
 - `walk`: distinct keys that sanitize to the same key overwrote each other silently. The result is unchanged (last value kept), but a warning with the collision count is now logged.
 
 ### Changed
@@ -39,6 +40,8 @@ Prepared maintenance release; not yet published. No exports, signatures, default
 - The `security` job audits the hash-pinned export of all locked dev and docs dependencies instead of pip-audit's own environment, and fails if a runtime dependency appears. Locked click, pygments, pymdown-extensions and pytest moved to releases with published security fixes (development tools only).
 - New `verify-dist` workflow checks the exact built wheel and sdist (contents, metadata, version/tag, installed behavior of every export, sdist rebuild). CI requires it through `quality-gate`, and the publish job now depends on it for the release artifacts.
 - New required `docs` job builds and checks the site on every PR; internal material is excluded before generation.
+- The publish job uses `pypa/gh-action-pypi-publish` v1.14.2 (twine 7.0.0, packaging 26.2); the previous pin (v1.13.0, packaging 25.0) rejects the Metadata-Version 2.5 that the build emits. `verify-dist` now runs `twine check --strict` on both artifacts inside that same publisher image, offline and without its upload entrypoint, and a test keeps the two pins identical.
+- `scripts/build_docs.py` refuses an `--out` that is the checkout, one of its parents, anything inside it other than `site/`, a symlink, or a non-empty directory that is not a site it generated. The staged site is checked before the previous one is replaced.
 - Removed the Grippy review workflow and the dormant CodeQL workflow.
 
 ### Testing
