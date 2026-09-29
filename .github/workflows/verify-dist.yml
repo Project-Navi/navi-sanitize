@@ -62,3 +62,4 @@ jobs:
           name: ${{ inputs.artifact-name }}-verification
           path: ${{ runner.temp }}/verify-dist.json
           if-no-files-found: error
+          overwrite: true # a re-run replaces this run's earlier report
