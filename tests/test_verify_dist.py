@@ -298,3 +298,19 @@ class TestSdistMatchesCheckout:
         dist_dir = dist.write(tmp_path / "dist")
         assert vd.main([str(dist_dir), "--pyproject", str(source / "pyproject.toml")]) == 1
         assert "differs from the checked-out source: LICENSE" in capsys.readouterr().err
+
+
+WORKFLOWS = ROOT / ".github" / "workflows"
+
+
+@pytest.mark.skipif(not WORKFLOWS.is_dir(), reason="workflows are not shipped in the sdist")
+def test_publisher_gate_matches_the_publish_action() -> None:
+    """verify-dist must check artifacts in the exact image the publish job will run."""
+    publish = (WORKFLOWS / "publish.yml").read_text(encoding="utf-8")
+    gate = (WORKFLOWS / "verify-dist.yml").read_text(encoding="utf-8")
+    pins = re.findall(r"uses: pypa/gh-action-pypi-publish@([0-9a-f]{40})", publish)
+    images = re.findall(r"ghcr\.io/pypa/gh-action-pypi-publish:([0-9a-f]{40})", gate)
+    assert len(pins) == 1, pins
+    assert images == pins
+    assert "needs: [verify-dist]" in publish  # nothing is uploaded before verification
+    assert "--network none" in gate and "twine check --strict" in gate

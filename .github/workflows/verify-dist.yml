@@ -43,6 +43,20 @@ jobs:
           args=("$DIST_DIR" --report "$RUNNER_TEMP/verify-dist.json")
           if [ -n "$TAG_NAME" ]; then args+=(--tag "$TAG_NAME"); fi
           uv run --no-project --python 3.12 python scripts/verify_dist.py "${args[@]}"
+      - name: Check dist with the publisher's own image (no upload)
+        # The image the pinned publish action runs, with its upload entrypoint
+        # replaced by `twine check`: no network, read-only, no credentials.
+        # Must match publish.yml's action pin (tests/test_verify_dist.py checks).
+        env:
+          DIST_DIR: ${{ runner.temp }}/dist
+          PUBLISHER_IMAGE: ghcr.io/pypa/gh-action-pypi-publish:dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+        run: |
+          docker pull --quiet "$PUBLISHER_IMAGE"
+          docker run --rm --network none --read-only -v "$DIST_DIR:/dist:ro" \
+            --entrypoint python "$PUBLISHER_IMAGE" -c \
+            "import importlib.metadata as m; print({p: m.version(p) for p in ('twine', 'packaging')})"
+          docker run --rm --network none --read-only -v "$DIST_DIR:/dist:ro" \
+            --entrypoint sh "$PUBLISHER_IMAGE" -c 'twine check --strict /dist/*.whl /dist/*.tar.gz'
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: ${{ inputs.artifact-name }}-verification
