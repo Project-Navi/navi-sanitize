@@ -67,6 +67,13 @@ def test_good_site_passes(tmp_path: Path) -> None:
     assert result["links_checked"] == 6
 
 
+def test_theme_skip_link_without_headings_passes(tmp_path: Path) -> None:
+    # zensical's skip link targets the first heading; a page without one gets "#__skip".
+    site = _site(tmp_path)
+    (site / "404.html").write_text('<a href="#__skip" class="md-skip">x</a><a href="/pkg/">h</a>')
+    assert bd.check_site(site, CONFIG)["links_checked"] == 6
+
+
 @pytest.mark.parametrize(
     ("mutate", "reason"),
     [

@@ -35,6 +35,9 @@ from urllib.parse import urlsplit
 
 EXCLUDED_SOURCES = ("plans", "internal", "whitepaper")
 FORBIDDEN_SUFFIXES = (".md", ".tex", ".pdf", ".gitkeep", ".gitignore", ".py")
+# zensical's skip link targets the page's first heading; on a page without one (404.html)
+# it falls back to "#__skip", which no element carries.
+THEME_SKIP_LINK = "#__skip"
 
 
 class DocsCheckError(Exception):
@@ -189,6 +192,8 @@ def check_site(site: Path, config: dict[str, object]) -> dict[str, object]:
     links = 0
     for rel, page in parsed.items():
         for link in page.links:
+            if link == THEME_SKIP_LINK:
+                continue
             parts = urlsplit(link)
             if parts.scheme or parts.netloc or link.startswith("mailto:"):
                 continue
