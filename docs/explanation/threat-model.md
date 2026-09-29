@@ -99,7 +99,7 @@ NFKC turns some code points into security-sensitive ASCII: fullwidth `＜`/`＞`
 Small capitals (`ᴀᴅᴍɪɴ`, U+1D00--U+1D22) and IPA letters such as `ɑ` (U+0251) are Latin script and not mapped. Use application-level allowlists for high-risk identifiers such as usernames.
 
 ### Dictionary Key Identity
-`walk()` sanitizes keys. Distinct keys that sanitize (or escape) to the same string collide: the last value is kept and a warning with the collision count is logged. Where distinct keys must be preserved, validate before or after sanitizing.
+`walk()` sanitizes keys. Distinct keys that sanitize (or escape) to the same string collide: the last value is kept and a warning with the collision count is logged. Where distinct keys must be preserved, validate before or after sanitizing. Running `walk()` again over its own output with a deleting escaper such as `path_escaper` can also merge keys that stayed distinct the first time, because escaper output is not re-normalized.
 
 ### Resource Limits
 `walk(max_depth=...)` is an advisory warning threshold, not a limit. It warns once when a container is first reached at depth ≥ `max_depth` (the top-level container is depth 0) and keeps going; a container shared by several paths is measured where it is first reached. Bound input size and nesting where you parse it.

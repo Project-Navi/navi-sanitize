@@ -36,6 +36,8 @@ Sanitize a single string through the universal pipeline.
 
 Returns output for any `str`, including lone surrogates. Logs a warning with a count (never content) when a stage changes the input. Escaper output is not re-sanitized, and exceptions raised by the escaper propagate.
 
+Without an escaper, `clean(clean(x)) == clean(x)`. With an escaper this is not promised, because escaper output is not re-normalized; see `path_escaper` below for a concrete case.
+
 **Examples:**
 
 ```python
@@ -189,6 +191,8 @@ Remove path traversal sequences from a string.
 6. Rejoin the remaining segments
 
 The result never contains an empty, `.` or `..` segment, and applying the escaper again changes nothing.
+
+**Composition:** Because escaper output is not re-normalized, the idempotence of `clean()` does not extend to every final-escaper composition: `clean('e..\u0301', escaper=path_escaper)` returns `'e\u0301'` (deleting `..` leaves a base letter next to a combining accent), and a second identical call returns `'\u00e9'`. The escaper itself is idempotent; re-running the whole pipeline over its output can still change it. For the same reason, a second `walk(..., escaper=path_escaper)` pass can merge keys such as `'e..\u0301'` and `'\u00e9'` that stayed distinct on the first pass.
 
 **Limits:** lexical string cleanup only. It does not confine the path to a base directory, resolve symlinks, touch the filesystem, or handle drive-qualified paths (`C:/temp` passes through), and it can return an empty string. Join the result to your base directory and check containment before use.
 

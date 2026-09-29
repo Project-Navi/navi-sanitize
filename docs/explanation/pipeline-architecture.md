@@ -171,6 +171,7 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 **Key properties:**
 - Runs **after** all universal stages
 - Output is **not** re-sanitized; a custom escaper can reintroduce any character
+- Idempotence is a property of the universal stages. Because escaper output is not re-normalized, the idempotence of `clean()` does not extend to every final-escaper composition: `clean('e..\u0301', escaper=path_escaper)` returns `'e\u0301'` (deleting `..` leaves a base letter next to a combining accent), and a second identical call returns `'\u00e9'`. The escaper itself is idempotent; re-running the whole pipeline over its output can still change it.
 - Must return `str` (raises `TypeError` otherwise); exceptions it raises propagate
 - If `None`, the stage is skipped
 

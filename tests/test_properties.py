@@ -181,10 +181,19 @@ class TestCleanProperties:
 
     @given(text=hostile_text)
     @settings(max_examples=100)
-    def test_idempotent_with_builtin_escapers(self, text: str) -> None:
-        for escaper in (jinja2_escaper, path_escaper):
-            first = clean(text, escaper=escaper)
-            assert clean(first, escaper=escaper) == first
+    def test_idempotent_with_jinja2_escaper(self, text: str) -> None:
+        # jinja2_escaper only inserts ASCII backslashes, so the composition is stable.
+        first = clean(text, escaper=jinja2_escaper)
+        assert clean(first, escaper=jinja2_escaper) == first
+
+    @given(text=hostile_text)
+    @settings(max_examples=100)
+    def test_path_escaper_is_a_fixed_point_on_clean_output(self, text: str) -> None:
+        # Direct idempotence only: escaper output is not re-normalized, so repeating
+        # clean(..., escaper=path_escaper) is not promised to be stable (see
+        # test_escapers.py::TestFinalEscaperComposition).
+        first = clean(text, escaper=path_escaper)
+        assert path_escaper(first) == first
 
 
 # ---------------------------------------------------------------------------

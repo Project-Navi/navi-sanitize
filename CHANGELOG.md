@@ -28,6 +28,7 @@ Prepared maintenance release; not yet published. No exports, signatures, default
 
 - README reduced to purpose, install, examples and limits; details live on the documentation site, now at docs.projectnavi.ai/navi-sanitize.
 - Corrected the nested-decoding example (`%252e%252e%252fetc%252fpasswd` decodes to `../etc/passwd`), the description of `walk()` as a deep copy, `max_depth` semantics, and the scope of both escapers.
+- Documented that `clean()` idempotence does not extend to every final-escaper composition (a second `clean(..., escaper=path_escaper)` can compose a combining mark that deleting `..` exposed).
 - Documented which legitimate text `clean()` changes, and a per-logger recipe for high-volume callers.
 - Removed unsupported claims: that the pipeline implements an OWASP-recommended design, that it is the only maintained homoglyph library, the SLSA Level 3 badge, and blanket Unicode-preservation and idempotency-for-all-inputs statements.
 - Fixed a hot-path tip that skipped ASCII control characters and the escaper; re-measured benchmark tables with their conditions.
@@ -42,7 +43,7 @@ Prepared maintenance release; not yet published. No exports, signatures, default
 
 ### Testing
 
-- Regression tests for each fix, exhaustive short-input checks for both escapers, a legacy-decoder differential property, full-range checks of the invisible-character set and single-code-point idempotency, explicit lone-surrogate inputs, and stronger fuzz invariants for the escaper paths.
+- Regression tests for each fix, exhaustive short-input checks for both escapers, a legacy-decoder differential property, full-range checks of the invisible-character set and single-code-point idempotency, explicit lone-surrogate inputs, and stronger fuzz invariants for the escaper paths (composition idempotence checked for `jinja2_escaper`; direct idempotence for `path_escaper`, with the composition limit characterized).
 - Benchmarks for `decode_evasion`, `jinja2_escaper` and `path_escaper`.
 
 ## [0.2.1] - 2026-04-04

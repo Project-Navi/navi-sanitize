@@ -208,3 +208,32 @@ class TestEscapersWithClean:
         assert "{{" not in result
         assert "\u200b" not in result
         assert "\u043e" not in result
+
+
+class TestFinalEscaperComposition:
+    """Characterization: escaper output is not re-normalized, so clean() idempotence
+    does not extend to every final-escaper composition. Not a promised behavior."""
+
+    def test_path_deletion_can_expose_a_new_normalization(self) -> None:
+        from navi_sanitize import clean, path_escaper
+
+        text = "e..\u0301"
+        first = clean(text, escaper=path_escaper)
+        assert first == "e\u0301"  # ".." removed after NFKC ran, leaving e + combining acute
+        assert path_escaper(first) == first  # the escaper itself is idempotent
+        assert clean(text) == clean(clean(text))  # plain clean() is idempotent
+        assert clean(first, escaper=path_escaper) == "\u00e9"  # a second pass composes it
+
+    def test_walk_second_pass_can_collide(self, caplog: pytest.LogCaptureFixture) -> None:
+        import logging
+
+        from navi_sanitize import path_escaper, walk
+
+        with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
+            once = walk({"e..\u0301": 1, "\u00e9": 2}, escaper=path_escaper)
+        assert once == {"e\u0301": 1, "\u00e9": 2}
+        assert "collision" not in caplog.text
+        with caplog.at_level(logging.WARNING, logger="navi_sanitize"):
+            twice = walk(once, escaper=path_escaper)
+        assert twice == {"\u00e9": 2}
+        assert "collision" in caplog.text

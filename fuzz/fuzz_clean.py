@@ -55,15 +55,18 @@ def fuzz_clean(data: bytes) -> None:
         # Invariant: idempotent
         assert clean(result) == result
     else:
-        # Invariant: built-in escapers are idempotent through clean()
-        assert clean(result, escaper=escaper) == result
-
         if escaper is jinja2_escaper:
+            # Invariant: stable through clean() (only ASCII backslashes are added)
+            assert clean(result, escaper=escaper) == result
             # Invariant: no raw default delimiter survives
             assert not _JINJA2_DELIMITER_RE.search(result)
-        elif result:
+        else:
+            # Invariant: the escaper is a fixed point on its own output. Repeating
+            # clean() is not promised: deleting ".." can leave a base letter next to
+            # a combining mark, which the next clean() composes.
+            assert escaper(result) == result
             # Invariant: no empty, "." or ".." path segment
-            assert not {"", ".", ".."} & set(result.split("/"))
+            assert not result or not {"", ".", ".."} & set(result.split("/"))
 
 
 def fuzz_walk(data: bytes) -> None:
