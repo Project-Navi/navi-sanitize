@@ -465,7 +465,14 @@ jobs:
           from pathlib import Path
 
           version = os.environ["VERSION"]
-          local = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in Path("dist").iterdir()}
+          # Only the distributions: the publish action adds *.publish.attestation files.
+          local = {
+              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in Path("dist").iterdir()
+              if p.name.endswith((".whl", ".tar.gz"))
+          }
+          if len(local) != 2:
+              sys.exit(f"::error::expected one wheel and one sdist in dist/, found {sorted(local)}")
           url = f"https://pypi.org/pypi/navi-sanitize/{version}/json"
           served: dict[str, str] = {}
           for attempt in range(20):  # the JSON API can lag the upload briefly
