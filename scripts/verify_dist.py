@@ -176,8 +176,9 @@ def read_wheel(path: Path, version: str) -> dict[str, bytes]:
         f"{info_dir}/{f}" for f in ("METADATA", "WHEEL", "RECORD", "licenses/LICENSE")
     }
     check(set(files) == expected, f"wheel members differ: {sorted(set(files) ^ expected)}")
-    rows = list(csv.reader(io.StringIO(files[f"{info_dir}/RECORD"].decode())))
-    record = {row[0]: row[1:] for row in rows if row}
+    rows = [row for row in csv.reader(io.StringIO(files[f"{info_dir}/RECORD"].decode())) if row]
+    record = {row[0]: row[1:] for row in rows}
+    check(len(record) == len(rows), "duplicate RECORD rows")
     check(set(record) == expected, "RECORD does not list exactly the wheel members")
     for name, data in files.items():
         if name != f"{info_dir}/RECORD":
@@ -209,10 +210,9 @@ def read_sdist(path: Path, version: str) -> dict[str, bytes]:
                 extracted = tf.extractfile(member)
                 check(extracted is not None, f"unreadable sdist member {rel}")
                 files[rel] = extracted.read() if extracted else b""
-    package = {k.removeprefix(f"src/{PKG}/") for k in files if k.startswith(f"src/{PKG}/")}
-    check(
-        package == PACKAGE_FILES, f"sdist package files differ: {sorted(package ^ PACKAGE_FILES)}"
-    )
+    src_files = {k for k in files if k.startswith("src/")}
+    expected_src = {f"src/{PKG}/{name}" for name in PACKAGE_FILES}
+    check(src_files == expected_src, f"sdist src/ files differ: {sorted(src_files ^ expected_src)}")
     missing = SDIST_REQUIRED - set(files)
     check(not missing, f"sdist missing {sorted(missing)}")
     check_metadata(files["PKG-INFO"].decode(), version)
@@ -220,6 +220,16 @@ def read_sdist(path: Path, version: str) -> dict[str, bytes]:
     check(pyproject["project"]["version"] == version, "sdist pyproject.toml version mismatch")
     check(files["LICENSE"].startswith(b"MIT License"), "sdist LICENSE is not MIT")
     return files
+
+
+def check_sdist_matches_source(sdist: dict[str, bytes], source_root: Path) -> None:
+    """Every sdist file except the generated PKG-INFO must equal the checked-out source."""
+    for rel, data in sorted(sdist.items()):
+        if rel == "PKG-INFO":
+            continue
+        source = source_root / rel
+        check(source.is_file(), f"sdist file not in the checked-out source: {rel}")
+        check(source.read_bytes() == data, f"sdist file differs from the checked-out source: {rel}")
 
 
 def check_same_package(wheel: dict[str, bytes], sdist: dict[str, bytes]) -> None:
@@ -349,17 +359,25 @@ def smoke(version: str) -> dict[str, str]:
     return {"module": str(pkg_dir), "python": sys.version.split()[0]}
 
 
-def inspect_artifacts(dist_dir: Path, version: str) -> tuple[Path, Path, dict[str, bytes]]:
-    """Static checks of both archives; returns (wheel, sdist, wheel contents)."""
+def inspect_artifacts(
+    dist_dir: Path, version: str, source_root: Path | None = None
+) -> tuple[Path, Path, dict[str, bytes]]:
+    """Static checks of both archives; returns (wheel, sdist, wheel contents).
+
+    With *source_root*, the sdist must also match that checkout file for file.
+    """
     wheel, sdist = find_artifacts(dist_dir, version)
     wheel_files = read_wheel(wheel, version)
-    check_same_package(wheel_files, read_sdist(sdist, version))
+    sdist_files = read_sdist(sdist, version)
+    check_same_package(wheel_files, sdist_files)
+    if source_root is not None:
+        check_sdist_matches_source(sdist_files, source_root)
     return wheel, sdist, wheel_files
 
 
 def verify(dist_dir: Path, tag: str | None, pyproject: Path) -> dict[str, object]:
     version = expected_version(pyproject, tag)
-    wheel, sdist, wheel_files = inspect_artifacts(dist_dir, version)
+    wheel, sdist, wheel_files = inspect_artifacts(dist_dir, version, pyproject.resolve().parent)
     with tempfile.TemporaryDirectory(prefix="verify-dist-") as tmp:
         work = Path(tmp)
         (work / "direct").mkdir()

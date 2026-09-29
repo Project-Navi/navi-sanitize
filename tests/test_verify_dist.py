@@ -56,6 +56,7 @@ class Dist:
     tamper: dict[str, bytes] = field(default_factory=dict)  # written after RECORD
     wheel_symlinks: tuple[str, ...] = ()
     sdist_symlinks: tuple[str, ...] = ()
+    duplicate_record_row: bool = False
 
     def __post_init__(self) -> None:
         info = f"navi_sanitize-{self.version}.dist-info"
@@ -81,6 +82,8 @@ class Dist:
     def write(self, dist_dir: Path) -> Path:
         dist_dir.mkdir(parents=True, exist_ok=True)
         rows = [f"{n},{vd._record_digest(d)},{len(d)}" for n, d in self.wheel.items()]
+        if self.duplicate_record_row:
+            rows.append(rows[0])
         rows.append(f"{self.info}/RECORD,,")
         with zipfile.ZipFile(
             dist_dir / f"navi_sanitize-{self.version}-py3-none-any.whl", "w"
@@ -172,6 +175,9 @@ class TestWheelContents:
         dist.wheel[f"{dist.info}/METADATA"] = _metadata(VERSION, "Requires-Dist: six\n")
         _fails(dist, tmp_path, "Requires-Dist")
 
+    def test_duplicate_record_row(self, tmp_path: Path) -> None:
+        _fails(Dist(duplicate_record_row=True), tmp_path, "duplicate RECORD rows")
+
     def test_license_missing(self, tmp_path: Path) -> None:
         dist = Dist()
         del dist.wheel[f"{dist.info}/licenses/LICENSE"]
@@ -197,6 +203,11 @@ class TestSdistContents:
         dist = Dist()
         del dist.sdist["LICENSE"]
         _fails(dist, tmp_path, "sdist missing")
+
+    def test_extra_file_under_src(self, tmp_path: Path) -> None:
+        dist = Dist()
+        dist.sdist["src/other_package/extra.py"] = b"x = 1\n"
+        _fails(dist, tmp_path, "sdist src/ files differ")
 
     def test_wheel_and_sdist_sources_differ(self, tmp_path: Path) -> None:
         dist = Dist()
@@ -240,3 +251,50 @@ def test_cli_reports_failure_without_traceback(
         == 1
     )
     assert "verify_dist: FAIL: tag 'v0.0.0'" in capsys.readouterr().err
+
+
+class TestSdistMatchesCheckout:
+    """Every sdist file except PKG-INFO must equal the checked-out source it was built from."""
+
+    @staticmethod
+    def _checkout(dist: Dist, root: Path) -> Path:
+        for name, data in dist.sdist.items():
+            if name != "PKG-INFO":
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_bytes(data)
+        return root
+
+    def test_matching_checkout_passes(self, tmp_path: Path) -> None:
+        dist = Dist()
+        source = self._checkout(dist, tmp_path / "src-root")
+        vd.inspect_artifacts(dist.write(tmp_path / "dist"), VERSION, source)
+
+    def test_changed_build_requirements_fail(self, tmp_path: Path) -> None:
+        dist = Dist()
+        source = self._checkout(dist, tmp_path / "src-root")
+        pyproject = source / "pyproject.toml"
+        pyproject.write_bytes(b'[build-system]\nrequires = ["other"]\n' + pyproject.read_bytes())
+        with pytest.raises(
+            vd.VerificationError,
+            match=re.escape("differs from the checked-out source: pyproject.toml"),
+        ):
+            vd.inspect_artifacts(dist.write(tmp_path / "dist"), VERSION, source)
+
+    def test_file_missing_from_checkout_fails(self, tmp_path: Path) -> None:
+        dist = Dist()
+        source = self._checkout(dist, tmp_path / "src-root")
+        (source / "README.md").unlink()
+        with pytest.raises(
+            vd.VerificationError, match=re.escape("not in the checked-out source: README.md")
+        ):
+            vd.inspect_artifacts(dist.write(tmp_path / "dist"), VERSION, source)
+
+    def test_cli_compares_against_pyproject_directory(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        dist = Dist()
+        source = self._checkout(dist, tmp_path / "src-root")
+        (source / "LICENSE").write_bytes(b"MIT License\n(edited)\n")
+        dist_dir = dist.write(tmp_path / "dist")
+        assert vd.main([str(dist_dir), "--pyproject", str(source / "pyproject.toml")]) == 1
+        assert "differs from the checked-out source: LICENSE" in capsys.readouterr().err
