@@ -1,6 +1,6 @@
 # Pipeline Architecture
 
-Every string passed to `clean()` flows through six stages in strict order. Each of the five universal stages (1--5) is a deterministic function that returns the cleaned string and a change indicator (a count of affected codepoints). The escaper (stage 6, if provided) is a plain `str -> str` function. The pipeline orchestrator logs warnings when stages modify input.
+Every string passed to `clean()` flows through six stages in strict order. Each of the five universal stages (1--5) is a deterministic function that returns the cleaned string and a count of changes. The escaper (stage 6, if provided) is a plain `str -> str` function. `clean()` logs a warning, with the count, when a stage changes the input.
 
 ## Data Flow
 
@@ -63,7 +63,7 @@ Input string
 
 **What:** Removes 492 invisible or near-invisible Unicode characters across 9 categories using a single compiled regex.
 
-**Why:** Invisible characters are the most common evasion vector. They can:
+**Why:** Invisible characters change text without changing how it looks. They can:
 - Break word boundaries without visible change (`"adm\u200bin"` looks like `"admin"`)
 - Hide content from humans while remaining in the byte stream
 - Encode invisible ASCII via the Unicode Tag block (tag smuggling)
@@ -81,7 +81,7 @@ Input string
 | Variation selector supplement | 240 | U+E0100--U+E01EF | VS17--VS256, extended glyph modifiers |
 | Bidi controls | 9 | Individual chars | Directional overrides, embeddings, isolates |
 | C0 controls | 28 | U+0001--U+001F | Terminal injection (BS, ESC, BEL); excludes TAB/LF/CR |
-| C1 controls | 32 | U+0080--U+009F | CSI (equivalent to ESC+[), NEL, invisible in all contexts |
+| C1 controls | 32 | U+0080--U+009F | CSI (equivalent to ESC+[) and other terminal controls; NEL (a line break) is removed too |
 
 See [Character Reference](../reference/character-reference.md) for the complete table.
 
@@ -136,7 +136,7 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 | Armenian | 2 | Օ→O, Ս→S |
 | Cherokee | 1 | Ꭺ→A |
 | Latin extended | 1 | ı→i |
-| Typographic | 7 | −→-, –→-, —→-, '→', '→', "→", "→" |
+| Typographic | 7 | −→-, –→-, —→-, ‘→', ’→', “→", ”→" |
 
 See [Character Reference](../reference/character-reference.md) for the complete map with codepoints.
 
@@ -157,8 +157,8 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 
 **Key properties:**
 - Only runs when Stage 4 actually replaced homoglyphs (zero cost for clean text)
-- Ensures `clean(clean(x)) == clean(x)` for all inputs
-- Does not produce a separate log message (the Stage 3 warning already covers NFKC)
+- Keeps `clean()` idempotent: `clean(clean(x)) == clean(x)`. This is checked exhaustively for every single code point and by property and fuzz tests, not proven for all strings
+- Does not produce a separate log message
 
 ---
 
@@ -170,13 +170,14 @@ See [Character Reference](../reference/character-reference.md) for the complete 
 
 **Key properties:**
 - Runs **after** all universal stages
-- Output is **not** re-sanitized (no infinite loops, no double-escaping)
-- Must return `str` (raises `TypeError` otherwise)
+- Output is **not** re-sanitized; a custom escaper can reintroduce any character
+- Idempotence is a property of the universal stages. Because escaper output is not re-normalized, the idempotence of `clean()` does not extend to every final-escaper composition: `clean('e..\u0301', escaper=path_escaper)` returns `'e\u0301'` (deleting `..` leaves a base letter next to a combining accent), and a second identical call returns `'\u00e9'`. The escaper itself is idempotent; re-running the whole pipeline over its output can still change it.
+- Must return `str` (raises `TypeError` otherwise); exceptions it raises propagate
 - If `None`, the stage is skipped
 
 **Built-in escapers:**
-- `jinja2_escaper` --- escapes `{{ }}`, `{% %}`, `{# #}` template delimiters
-- `path_escaper` --- strips `../`, `./`, leading `/`, embedded `..`
+- `jinja2_escaper` --- backslash-escapes Jinja2's default delimiters `{{ }}`, `{% %}`, `{# #}`, including brace runs and overlapping sequences such as `{{%`
+- `path_escaper` --- lexical cleanup: strips `../`, `./`, leading `/` and embedded `..`; no filesystem checks
 
 See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for how to build your own.
 
@@ -184,19 +185,19 @@ See [Writing Custom Escapers](../how-to/writing-custom-escapers.md) for how to b
 
 ## Why Order Matters
 
-The stage order is not arbitrary --- reordering breaks security guarantees.
+The stage order is not arbitrary --- each stage relies on the ones before it, and reordering lets some combinations through.
 
-**Null bytes before invisible chars:** Null bytes can split strings that, once joined, form invisible character sequences. Removing nulls first ensures the invisible stage sees the actual content.
+**Null bytes first:** Nulls are removed before anything else so no later stage or escaper sees them. Stages 1 and 2 both delete single code points, so their relative order does not change the result.
 
 **Invisibles before NFKC:** Some invisible characters are compatibility forms that NFKC would normalize rather than remove. Stripping them first is more aggressive and correct.
 
-**NFKC before homoglyphs:** NFKC can produce characters that are homoglyph targets (e.g., mathematical symbols normalizing to Greek letters). Running normalization first ensures the homoglyph map catches everything.
+**NFKC before homoglyphs:** NFKC can produce characters that are homoglyph targets (e.g., mathematical symbols normalizing to Greek letters). Running normalization first means the homoglyph map sees those characters.
 
-**Re-NFKC after homoglyphs:** Homoglyph replacement can leave Latin characters adjacent to combining marks that NFKC would compose into precomposed forms. Running NFKC again ensures the output is fully normalized and `clean()` is idempotent.
+**Re-NFKC after homoglyphs:** Homoglyph replacement can leave Latin characters adjacent to combining marks that NFKC would compose into precomposed forms. Running NFKC again keeps the output NFKC-normalized, which is what keeps `clean()` idempotent in the tested cases (see Stage 5).
 
-**Homoglyphs before escaper:** The escaper operates on ASCII-normalized text. If homoglyphs remained, a Jinja2 escaper might miss `{{ cоnfig }}` (Cyrillic `о`) because the braces appear with a non-ASCII interior that doesn't match expected patterns.
+**Normalization before escaper:** Escapers match ASCII syntax. Fullwidth `｛｛` or `．．／` only become `{{` or `../` during NFKC, so an escaper that ran earlier would miss them.
 
-**Escaper last:** The escaper's output is context-specific and should not be altered by earlier stages. Re-sanitizing escaper output could break its escaping (e.g., backslash-escaped braces being re-processed).
+**Escaper last:** The escaper's output is context-specific and should not be altered by earlier stages. Re-sanitizing escaper output could change its escaping (e.g., the backslashes it inserts).
 
 ---
 

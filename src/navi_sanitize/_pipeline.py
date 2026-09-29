@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 """Core sanitization pipeline.
 
-Six stages in strict order. Reordering breaks security:
+Six stages in strict order; each relies on the ones before it:
 1. Null bytes   — prevent C-level string truncation
 2. Invisibles   — strip 492 chars (zero-width, format/control, VS, tag block, bidi, C0/C1)
 3. NFKC         — normalize fullwidth and compatibility forms
 4. Homoglyphs   — replace confusable characters with Latin equivalents
-5. Re-NFKC      — re-normalize if homoglyphs were replaced (idempotency)
+5. Re-NFKC      — re-normalize if homoglyphs were replaced (keeps output NFKC-stable)
 6. Escaper      — caller-supplied context-specific escaping (optional)
 """
 
@@ -89,16 +89,16 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
     2. Invisible character stripping (492 chars across 9 categories)
     3. NFKC normalization (fullwidth → standard forms)
     4. Homoglyph replacement (Cyrillic/Greek/Armenian/Cherokee/typographic → Latin)
-    5. Re-NFKC (if homoglyphs were replaced — ensures idempotency)
+    5. Re-NFKC (if homoglyphs were replaced, so the output stays NFKC-normalized)
     6. Escaper (if provided)
 
-    Always returns output. Logs warnings when input is modified.
+    Returns output for any str input; raises TypeError for non-str input or
+    non-str escaper output. Logs warnings (counts only) when input is modified.
 
     Security note: The escaper runs as the final stage. Its output is NOT
-    re-sanitized through the pipeline. Built-in escapers (jinja2_escaper,
-    path_escaper) are tested and safe. Custom escapers are within the
+    re-sanitized through the pipeline. Custom escapers are within the
     caller's trust boundary — if a custom escaper introduces hostile
-    characters, those characters will appear in the output.
+    characters or raises, that reaches the caller unchanged.
     """
     if not isinstance(text, str):
         raise TypeError(f"clean() requires str, got {type(text).__name__}")
@@ -137,20 +137,26 @@ def clean(text: str, *, escaper: Escaper | None = None) -> str:
 
 
 def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) -> T:
-    """Recursively sanitize every string in a dict/list/nested structure.
+    """Sanitize every string in a nested dict/list structure, dict keys included.
 
-    Non-string values pass through unchanged. Always returns output.
-    Like clean(), walk() never crashes on data shape — only programming
-    errors (max_depth < 0) raise ValueError.
+    Dicts (keys and values) and lists are copied as plain dict/list; the
+    input is never modified. Other objects (tuples, sets, bytes, custom
+    types) are not traversed and are returned by reference. walk() never
+    crashes on data shape; max_depth < 0 raises ValueError, and errors from
+    clean() or the escaper propagate.
 
     Uses a single iterative pass (no recursion, no deepcopy) so hostile
-    nesting depth cannot cause stack overflow. Logs a warning when nesting
-    exceeds *max_depth* but continues sanitizing. Cyclic references are
-    handled via identity tracking — each container is copied and sanitized
-    exactly once.
+    nesting depth cannot cause stack overflow. Cycles and shared containers
+    are preserved via identity tracking — each is copied and sanitized once.
 
-    Only dict and list contents are traversed; tuples, sets, and other
-    types pass through by reference.
+    *max_depth* is an advisory threshold, not a limit: one warning is logged
+    when a container is first reached at depth >= max_depth (the top-level
+    container is depth 0), and sanitizing continues. A shared container is
+    measured on the path where walk() first reaches it.
+
+    Lossy for dict keys: if distinct keys sanitize to the same key, the last
+    value is kept and a warning with the collision count is logged. Validate
+    keys yourself where distinct key identity matters.
     """
     if max_depth < 0:
         raise ValueError("max_depth must be >= 0")
@@ -218,9 +224,20 @@ def walk[T](data: T, *, escaper: Escaper | None = None, max_depth: int = 128) ->
                     max_depth,
                 )
                 depth_warned = True
+            assigned = 0
             for k, v in orig_d.items():
                 new_k = clean(k, escaper=escaper) if isinstance(k, str) else k
                 copy_d[new_k] = _resolve(v, depth)
+                assigned += 1
+            # Assignments that did not add a key overwrote one. Uses only the
+            # plain copy, never a subclass's __len__, and no extra key lookups.
+            collisions = assigned - len(copy_d)
+            if collisions:
+                logger.warning(
+                    "walk() dict key collision: %d key(s) sanitized to an existing key; "
+                    "last value kept",
+                    collisions,
+                )
         elif list_stack:
             orig_l, copy_l, depth = list_stack.pop()
             if depth >= max_depth and not depth_warned:

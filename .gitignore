@@ -13,7 +13,6 @@ build/
 .claude/
 .claude-flow/
 .serena/
-grippy-data/
 
 .benchmarks/
 

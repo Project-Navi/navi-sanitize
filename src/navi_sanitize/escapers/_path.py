@@ -10,16 +10,18 @@ def path_escaper(text: str) -> str:
     Normalizes backslashes to forward slashes, then strips ../ and ./ segments,
     leading /, and embedded .. within segments (which can appear when earlier
     pipeline stages concatenate fragments).
+
+    Lexical string cleanup only: no filesystem access, allowed-root check,
+    symlink resolution, or drive-letter handling. The result may be empty.
     """
     text = text.replace("\\", "/")
     text = text.lstrip("/")
     parts = text.split("/")
     clean_parts: list[str] = []
     for part in parts:
-        if part in ("..", "."):
-            continue
-        # Strip embedded ".." (e.g. null byte removal can fuse "safe.txt" + "../../")
+        # Strip embedded ".." (e.g. null byte removal can fuse "safe.txt" + "../../").
+        # Check the result, not the input: "..." becomes ".", a new dot segment.
         stripped = part.replace("..", "")
-        if stripped:
+        if stripped and stripped != ".":
             clean_parts.append(stripped)
     return "/".join(clean_parts)

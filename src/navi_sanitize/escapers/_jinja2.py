@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import re
 
-_JINJA2_ESCAPE_RE = re.compile(r"\{{2,}|\}{2,}|\{%|%\}|\{#|#\}")
+# Each match is a maximal chain of overlapping delimiters ("{{%", "{%}", "%}}"),
+# so no raw delimiter can form between an escaped character and the next one.
+# Factored after the leading "{" so plain "{{" runs do not backtrack.
+_JINJA2_ESCAPE_RE = re.compile(r"\{(?:\{+(?:[%#]\}*)?|[%#]\}*)|[%#]\}+|\}{2,}")
 
 
 def _escape_match(m: re.Match[str]) -> str:
@@ -14,9 +17,11 @@ def _escape_match(m: re.Match[str]) -> str:
 
 
 def jinja2_escaper(text: str) -> str:
-    """Escape Jinja2 template delimiters in a string.
+    """Escape Jinja2's default template delimiters in a string.
 
-    Replaces {{ }} {% %} {# #} with backslash-escaped equivalents.
-    Handles runs of 2+ braces (e.g. {{{ or }}}) in a single pass.
+    Backslash-escapes each character of {{ }} {% %} {# #}, including brace
+    runs ({{{, }}}) and overlapping sequences ({{%, %}}), in a single pass.
+    Breaks up the default delimiters only; it does not escape HTML, validate
+    templates, or handle custom delimiter settings.
     """
     return _JINJA2_ESCAPE_RE.sub(_escape_match, text)

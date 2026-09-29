@@ -7,6 +7,7 @@ changes, or range edits. See issue #8 for the planned refactor.
 
 from __future__ import annotations
 
+import sys
 import unicodedata
 
 from navi_sanitize._invisible import (
@@ -67,6 +68,12 @@ class TestInvisibleRegexCoverage:
                 name = unicodedata.name(ch, f"U+{cp:04X}")
                 missed.append(f"U+{cp:04X} ({name})")
         assert not missed, f"Regex missed {len(missed)} codepoints: {missed[:10]}"
+
+    def test_regex_matches_exactly_the_declared_set(self) -> None:
+        """Across every code point, the regex matches the declared set and nothing else."""
+        matched = {cp for cp in range(sys.maxunicode + 1) if INVISIBLE_RE.fullmatch(chr(cp))}
+        extra = sorted(f"U+{cp:04X}" for cp in matched - _build_expected_codepoints())
+        assert matched == _build_expected_codepoints(), f"unexpected matches: {extra[:10]}"
 
     def test_regex_does_not_match_safe_chars(self) -> None:
         """INVISIBLE_RE does not match printable ASCII, TAB, LF, CR, or NUL."""

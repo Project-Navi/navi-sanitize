@@ -1,25 +1,46 @@
 # Performance
 
-Benchmarks measured on Python 3.13, single thread, AMD Ryzen 9 9950X. Run via `uv run pytest tests/test_benchmark.py -v`. Numbers are representative --- expect ±20% on different hardware; CI runners are typically 2--3x slower.
+## Measured Results
 
-## Benchmark Results
+Measured with the suite in `tests/test_benchmark.py` on one workstation; each figure is the median across three runs. Treat these as a relative guide: absolute numbers depend on the machine and Python build.
+
+**Conditions:** navi-sanitize 0.2.2 candidate runtime code (commit `63a6455`), CPython 3.12.12, AMD Ryzen 9 9950X, Linux, pytest-benchmark 5.2.3, single thread, September 2026.
 
 ### `clean()` --- Per-String Cost
 
-| Scenario | Mean | Ops/sec | Description |
-|----------|------|---------|-------------|
-| Short, clean text (no-op) | 1.1 µs | 905K | ~38 chars, no stages fire |
-| Short, hostile (all stages) | 21 µs | 48K | ~27 chars with homoglyphs, null bytes, zero-width, template syntax |
-| 13KB clean text | 292 µs | 3.4K | Large clean input throughput |
-| 10KB hostile text | 305 µs | 3.3K | Large hostile input with repeated attack patterns |
-| 100KB hostile payload | 3.5 ms | 286 | Stress test payload |
+| Scenario | Median | Per second | Input |
+|----------|--------|------------|-------|
+| Short, clean text (no-op) | 1.2 µs | ~840K | ~38 chars, no stage changes anything |
+| Short, hostile, with `jinja2_escaper` | 21.1 µs | ~47K | 19 chars: homoglyphs, null byte, zero-width, template syntax |
+| 13,000 chars, clean | 313 µs | ~3.2K | Large no-op input |
+| 4,000 chars, hostile, with `jinja2_escaper` | 295 µs | ~3.4K | Repeated hostile pattern |
+| 47,500 chars (57KB UTF-8), hostile, with `jinja2_escaper` | 3.4 ms | ~290 | Stress payload |
 
-### `walk()` --- Recursive Structure Cost
+### `walk()` --- Nested Structure Cost
 
-| Scenario | Mean | Ops/sec | Description |
-|----------|------|---------|-------------|
-| 100-item nested dict, clean | 311 µs | 3.2K | Iterative copy + traversal overhead, no stages fire |
-| 100-item nested dict, hostile | 2.5 ms | 408 | Iterative copy + full pipeline on every string |
+| Scenario | Median | Per second | Input |
+|----------|--------|------------|-------|
+| 100-item nested dict, clean | 346 µs | ~2.9K | Copy and traversal, no stage changes anything |
+| 100-item nested dict, hostile | 2.4 ms | ~420 | Copy plus pipeline changes on every string |
+
+### Opt-in Utilities and Escapers
+
+| Scenario | Median | Per second | Input |
+|----------|--------|------------|-------|
+| `decode_evasion()`, double-encoded path | 10.2 µs | ~98K | `%252e%252e%252fetc%252fpasswd` |
+| `decode_evasion()`, 13,600 chars of mixed encodings | 579 µs | ~1.7K | URL, HTML entity and `\xHH` escapes |
+| `jinja2_escaper()`, 11,400 chars of overlapping delimiters | 802 µs | ~1.2K | Called directly |
+| `path_escaper()`, 10,200 chars of dot segments | 117 µs | ~8.6K | Called directly |
+
+## Running Benchmarks
+
+```bash
+uv run pytest tests/test_benchmark.py -v             # everything
+uv run pytest tests/test_benchmark.py -v -k clean    # clean() only
+uv run pytest tests/test_benchmark.py -v -k walk     # walk() only
+```
+
+The 47,500-char payload uses `pedantic()` mode (50 rounds, 5 warmup) to avoid excessive iterations. Compare versions on the same machine and interpreter; CI runners are too noisy for small differences.
 
 ## When to Use `clean()` vs `walk()`
 
@@ -29,50 +50,36 @@ Benchmarks measured on Python 3.13, single thread, AMD Ryzen 9 9950X. Run via `u
 | JSON request body | `walk()` |
 | Individual form fields already extracted | `clean()` on each |
 | Nested config from untrusted source | `walk()` |
-| Hot path, single known string | `clean()` |
 
-`walk()` adds iterative copy overhead to ensure the original data is never modified. If you're already working with a copy or don't need immutability, you can call `clean()` on individual strings for better performance.
+`walk()` builds new dicts and lists so the input is never modified. If you know which fields matter, calling `clean()` on those fields avoids copying the rest.
 
-## Performance Characteristics by Stage
+## Cost by Stage
 
-| Stage | Cost Profile | Notes |
-|-------|-------------|-------|
-| Null bytes | O(n) | `str.replace` --- very fast |
-| Invisible chars | O(n) | Single compiled regex --- fast |
-| NFKC normalization | O(n) | `unicodedata.normalize` --- C implementation |
-| Homoglyphs | O(n) | Character-by-character dict lookup --- fast for short strings, linear for long |
-| Escaper | Varies | Depends on escaper implementation |
+| Stage | Cost | Notes |
+|-------|------|-------|
+| Null bytes | O(n) | `str.count` / `str.replace` |
+| Invisible chars | O(n) | One compiled regex |
+| NFKC normalization | O(n) | `unicodedata.normalize` (C implementation) |
+| Homoglyphs | O(n) | NFD, per-character dict lookup, NFC |
+| Escaper | Varies | Depends on the escaper |
 
-All stages are O(n) in string length. The pipeline makes a single pass per stage (5 passes total). The dominant cost for clean text is the invisible character regex and NFKC normalization (the regex `findall` check and `unicodedata.normalize` still scan the full string).
+Even for clean text every stage scans the whole string; the invisible-character regex and the normalization calls dominate.
 
-## Tips for Hot Paths
+## Hot Paths
 
-**Batch at the boundary:** Sanitize input once when it enters your system, not on every use. Store the sanitized version.
+**Sanitize once at the boundary** and store the result, rather than on every use.
 
-**Skip `walk()` when possible:** If you know the structure of your data, calling `clean()` on specific fields avoids `deepcopy` overhead.
-
-**Pre-check with `is_ascii()`:** If you know your input is pure ASCII, you can skip sanitization entirely --- none of the universal stages modify ASCII text (except null bytes, which are rare in text input).
+**Printable ASCII is never changed** by the universal stages, so you can skip them for such input. Check `isprintable()` as well as `isascii()`: ASCII control characters such as ESC are stripped and must not take the shortcut. Apply your escaper either way:
 
 ```python
-def sanitize_if_needed(text: str, **kwargs) -> str:
-    if text.isascii() and "\x00" not in text:
+from navi_sanitize import clean
+
+def clean_fast(text: str) -> str:
+    if text.isascii() and text.isprintable():
         return text
-    return clean(text, **kwargs)
+    return clean(text)
+
+safe = my_escaper(clean_fast(user_input))  # the escaper still runs
 ```
 
-**Escaper cost:** The universal stages are fixed-cost. If your custom escaper is expensive, that's where optimization efforts should focus.
-
-## Running Benchmarks
-
-```bash
-# Run all benchmarks
-uv run pytest tests/test_benchmark.py -v
-
-# Run only clean() benchmarks
-uv run pytest tests/test_benchmark.py -v -k "clean"
-
-# Run only walk() benchmarks
-uv run pytest tests/test_benchmark.py -v -k "walk"
-```
-
-Benchmarks use `pytest-benchmark`. The 100KB payload test uses `pedantic()` mode (50 rounds, 5 warmup) to avoid excessive iterations.
+**What costs more:** input that triggers changes costs more than clean input of the same size, because each changing stage rebuilds the string and logs a warning (compare the clean and hostile rows above). Beyond that, an expensive custom escaper is the main lever.

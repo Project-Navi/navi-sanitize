@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 import pytest
 
@@ -199,3 +200,25 @@ class TestEscaperIntegration:
 
         clean("n\u0430vi\x00", escaper=spy_escaper)
         assert received == ["navi"]  # null byte and homoglyph already cleaned
+
+
+class TestExhaustiveSingleCodePoints:
+    """Whole-range checks that back documented guarantees."""
+
+    def test_idempotent_for_every_code_point(self, caplog: pytest.LogCaptureFixture) -> None:
+        from navi_sanitize import clean
+
+        caplog.set_level(logging.CRITICAL, logger="navi_sanitize")
+        failures = []
+        for cp in range(sys.maxunicode + 1):
+            once = clean(chr(cp))
+            if clean(once) != once:
+                failures.append(f"U+{cp:04X}")
+        assert not failures, failures[:10]
+
+    def test_printable_ascii_unchanged(self) -> None:
+        from navi_sanitize import clean
+
+        printable = "".join(chr(cp) for cp in range(0x20, 0x7F))
+        assert clean(printable) == printable
+        assert clean(printable + "\t\n\r") == printable + "\t\n\r"

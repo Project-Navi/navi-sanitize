@@ -5,10 +5,30 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/navi_sanitize"]
 
+[tool.hatch.build.targets.sdist]
+# An explicit allowlist: repository automation, agent notes, local caches and
+# the whitepaper binary stay out. pyproject.toml, README and LICENSE are implicit.
+only-include = [
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "GOVERNANCE.md",
+    "SECURITY.md",
+    "docs",
+    "examples",
+    "fuzz",
+    "scripts",
+    "src",
+    "tests",
+    "uv.lock",
+    "zensical.toml",
+]
+exclude = ["/docs/plans", "/docs/whitepaper"]
+
 [project]
 name = "navi-sanitize"
-version = "0.2.1"
-description = "Input sanitization pipeline for untrusted text. Deterministic. No ML. Legitimate Unicode preserved."
+version = "0.2.2"
+description = "Deterministic sanitization for untrusted text: strips invisible and control characters, applies NFKC and replaces common homoglyphs. No dependencies."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
