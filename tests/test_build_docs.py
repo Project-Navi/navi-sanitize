@@ -67,6 +67,14 @@ def test_good_site_passes(tmp_path: Path) -> None:
     assert result["links_checked"] == 6
 
 
+def test_theme_skip_link_without_heading_anchor_passes(tmp_path: Path) -> None:
+    # zensical's skip link targets the first heading anchor; the 404 page has none.
+    site = _site(tmp_path)
+    skip = '<a href="#__skip" class="md-skip">x</a>'
+    (site / "404.html").write_text(f'{skip}<h1>404</h1><a href="/pkg/">h</a>')
+    assert bd.check_site(site, CONFIG)["links_checked"] == 6
+
+
 @pytest.mark.parametrize(
     ("mutate", "reason"),
     [
@@ -74,6 +82,13 @@ def test_good_site_passes(tmp_path: Path) -> None:
         (lambda s: (s / "whitepaper.pdf").write_bytes(b"%PDF"), "non-site file"),
         (lambda s: (s / "index.html").write_text('<a href="missing/">x</a>'), "broken link"),
         (lambda s: (s / "index.html").write_text('<a href="#nowhere">x</a>'), "missing anchor"),
+        (lambda s: (s / "404.html").write_text('<a href="#__skip">x</a>'), "missing anchor"),
+        (
+            lambda s: (s / "index.html").write_text(
+                '<a href="#__skip" class="md-skip">x</a><h1 id="top">x</h1>'
+            ),
+            "missing anchor",
+        ),
         (lambda s: (s / "404.html").write_text('<a href="/other/">x</a>'), "outside /pkg/"),
         (lambda s: (s / "index.html").write_text('<a href="../../etc">x</a>'), "leaves the site"),
         (
