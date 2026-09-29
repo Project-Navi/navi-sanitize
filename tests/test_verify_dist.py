@@ -312,5 +312,9 @@ def test_publisher_gate_matches_the_publish_action() -> None:
     images = re.findall(r"ghcr\.io/pypa/gh-action-pypi-publish:([0-9a-f]{40})", gate)
     assert len(pins) == 1, pins
     assert images == pins
-    assert "needs: [verify-dist]" in publish  # nothing is uploaded before verification
     assert "--network none" in gate and "twine check --strict" in gate
+    # Nothing is uploaded before verification: the job running the publish action needs it.
+    jobs = re.split(r"^  (?=[a-z0-9-]+:$)", publish, flags=re.M)
+    [upload] = [job for job in jobs if "uses: pypa/gh-action-pypi-publish@" in job]
+    needs = re.search(r"^    needs: \[([^\]]*)\]$", upload, re.M)
+    assert needs is not None and "verify-dist" in re.split(r",\s*", needs.group(1))

@@ -1,84 +1,561 @@
+# Tag-triggered release pipeline (the Python lane of ordvec's release.yml).
+#
+# Pushing a stable vMAJOR.MINOR.PATCH tag on the current main HEAD runs:
+#   guard (strict SemVer) -> require-ci-green (exact-SHA main push runs of ci.yml,
+#   fuzz.yml and semgrep.yml all green) -> notes (dated CHANGELOG section -> DRAFT
+#   GitHub Release) + build (wheel, sdist, SBOMs) -> verify-dist (contents, installed
+#   behavior, sdist rebuild, twine check in the pinned publisher image) -> attest
+#   (GitHub attestation + .sigstore.json) + provenance (SLSA .intoto.jsonl) ->
+#   release-assets-draft (stage everything on the DRAFT Release) -> publish-pypi
+#   (Trusted Publishing behind the `pypi` environment, then PyPI-served hashes must
+#   equal the staged files) -> publish-github-release (un-draft).
+#
+# Un-drafting last means no public Release exists for a version PyPI refused. If a
+# job fails, the Release stays DRAFT; fix and re-run the failed job.
+#
+# PyPI's Trusted Publisher is registered for this file name and the `pypi`
+# environment; keep both. The tag name reaches scripts only as quoted env vars.
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
 
-permissions: {}
-
+# One pipeline per tag; never cancel an in-flight publish. Per-tag groups stop a later
+# tag push (even a malformed one) from replacing a queued release. Two versions cannot
+# both publish: the tag must be the current main HEAD and match the package version.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  ci:
-    uses: ./.github/workflows/ci.yml
+  guard:
+    name: gate on a stable SemVer tag
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.semver.outputs.ok }}
+      version: ${{ steps.semver.outputs.version }}
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Enforce strict SemVer
+        id: semver
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          # Each segment is 0 or [1-9][0-9]* (no leading zeros); no suffix.
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          if [[ "$TAG_NAME" =~ $semver ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "version=${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::the pushed tag is not a stable vMAJOR.MINOR.PATCH tag; skipping release."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Require a signed annotated tag on the pushed commit
+        # `gh release create --verify-tag` only checks that the tag exists.
+        if: steps.semver.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ref="$(gh api "repos/${REPO}/git/ref/tags/${TAG_NAME}")"
+          if [ "$(jq -r '.object.type' <<<"$ref")" != "tag" ]; then
+            echo "::error::release tags must be signed annotated tags; this is a lightweight tag"
+            exit 1
+          fi
+          tag="$(gh api "repos/${REPO}/git/tags/$(jq -r '.object.sha' <<<"$ref")")"
+          verified="$(jq -r '.verification.verified' <<<"$tag")"
+          reason="$(jq -r '.verification.reason' <<<"$tag")"
+          target="$(jq -r '.object.sha' <<<"$tag")"
+          if [ "$verified" != "true" ]; then
+            echo "::error::the tag signature is not verified by GitHub (${reason})"
+            exit 1
+          fi
+          if [ "$target" != "$SHA" ]; then
+            echo "::error::the tag points at ${target}, not the pushed commit ${SHA}"
+            exit 1
+          fi
+          echo "signed tag verified (${reason}) on ${SHA}"
+
+  require-ci-green:
+    # The tag must point at the current main HEAD, and every workflow that runs on
+    # each push to main must have concluded `success` for that exact SHA. docs.yml
+    # (path-filtered) and scorecard.yml (advisory) are not gated.
+    name: require full CI green for this commit
+    needs: guard
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: read
+      actions: read
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: assert release-gated workflows are green for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          POLL_INTERVAL_SECONDS: 30
+          POLL_TIMEOUT_SECONDS: 1800
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + POLL_TIMEOUT_SECONDS))
+          while :; do
+            MAIN_SHA="$(gh api "repos/${REPO}/commits/main" --jq '.sha')"
+            echo "current main sha: ${MAIN_SHA}"
+            if [ "$SHA" != "$MAIN_SHA" ]; then
+              echo "::error::release tag points at ${SHA}, but current main is ${MAIN_SHA}. Move the tag to the current protected main HEAD and re-run."
+              exit 1
+            fi
+
+            all_green=true
+            for wf in ci.yml fuzz.yml semgrep.yml; do
+              # Query every status, then inspect the latest exact-SHA push run, so
+              # run-visibility delay is not mistaken for failure.
+              api_error="$(mktemp)"
+              if runs_json="$(gh api \
+                "repos/${REPO}/actions/workflows/${wf}/runs?head_sha=${SHA}&branch=main&event=push&per_page=100" \
+                2>"$api_error")"; then
+                :
+              else
+                api_exit_status=$?
+                api_message="$(<"$api_error")"
+                api_status="$(sed -nE 's/.*HTTP ([0-9]{3}).*/\1/p' "$api_error" | tail -n 1)"
+                retryable_api_error=false
+                case "$api_status" in
+                  408|429|5??)
+                    retryable_api_error=true
+                    ;;
+                  "")
+                    if [ "$api_exit_status" -ne 4 ] && grep -Eiq \
+                      'timeout|timed out|connection (reset|refused|closed)|could not resolve|temporary failure in name resolution|network is unreachable|TLS handshake|unexpected EOF|error connecting to' \
+                      "$api_error"; then
+                      retryable_api_error=true
+                    fi
+                    ;;
+                  403)
+                    if grep -Eiq 'rate.?limit|secondary rate|abuse detection' "$api_error"; then
+                      retryable_api_error=true
+                    fi
+                    ;;
+                esac
+                rm -f "$api_error"
+                if "$retryable_api_error"; then
+                  echo "waiting for ${wf}: transient API query failure${api_status:+ (HTTP ${api_status})}: ${api_message}"
+                  all_green=false
+                  continue
+                fi
+                echo "::error::${wf}: API query failed permanently${api_status:+ (HTTP ${api_status})}: ${api_message}"
+                exit 1
+              fi
+              rm -f "$api_error"
+
+              latest="$(jq -r --arg sha "$SHA" '
+                [.workflow_runs[]
+                  | select(.head_sha == $sha and .head_branch == "main" and .event == "push")]
+                | sort_by([.run_number, .run_attempt, .id])
+                | last
+                | if . == null then ""
+                  else [.status, (.conclusion // ""), (.html_url // "")] | join("|")
+                  end
+              ' <<<"$runs_json")"
+              if [ -z "$latest" ]; then
+                echo "waiting for ${wf}: no exact-SHA main push run is visible yet"
+                all_green=false
+                continue
+              fi
+
+              IFS='|' read -r status conclusion run_url <<<"$latest"
+              if [ "$status" != "completed" ]; then
+                echo "waiting for ${wf}: latest run is ${status} (${run_url})"
+                all_green=false
+              elif [ "$conclusion" = "success" ]; then
+                echo "green ${wf}: ${run_url}"
+              else
+                echo "::error::${wf} completed with ${conclusion:-no conclusion} for ${SHA}: ${run_url}"
+                exit 1
+              fi
+            done
+
+            if "$all_green"; then
+              FINAL_MAIN_SHA="$(gh api "repos/${REPO}/commits/main" --jq '.sha')"
+              echo "final current main sha: ${FINAL_MAIN_SHA}"
+              if [ "$SHA" != "$FINAL_MAIN_SHA" ]; then
+                echo "::error::main advanced from release tag ${SHA} to ${FINAL_MAIN_SHA} while CI was being checked. Tag only the new protected main HEAD after its own CI is green."
+                exit 1
+              fi
+              echo "all release-gated workflows are green for ${SHA} on main"
+              break
+            fi
+            if (( SECONDS >= deadline )); then
+              echo "::error::timed out after ${POLL_TIMEOUT_SECONDS}s waiting for exact-SHA main push CI. No artifacts or draft release were created."
+              exit 1
+            fi
+            echo "CI is not settled; polling again in ${POLL_INTERVAL_SECONDS}s"
+            sleep "$POLL_INTERVAL_SECONDS"
+          done
+
+  notes:
+    name: release notes (CHANGELOG) + draft Release
+    needs: [guard, require-ci-green]
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the draft GitHub Release
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Extract the dated CHANGELOG section for this version
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          text = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          heading = rf"^## \[{re.escape(version)}\] - ([^\n]+)\n"
+          match = re.search(heading + r"(.*?)(?=^## \[|\Z)", text, re.M | re.S)
+          if match is None:
+              sys.exit(f"::error::CHANGELOG.md has no section for {version}")
+          if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", match.group(1).strip()):
+              sys.exit(f"::error::CHANGELOG.md section for {version} is not dated: {match.group(1)!r}")
+          Path("RELEASE_NOTES.md").write_text(match.group(2).strip() + "\n", encoding="utf-8")
+          PY
+      - name: Create (or, on a re-run, reuse) the draft GitHub Release
+        # Draft so assets and provenance are staged first; `publish-github-release`
+        # un-drafts only after PyPI accepted the files. `--verify-tag` ties it to this tag.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if is_draft="$(gh release view "$TAG_NAME" --json isDraft --jq .isDraft 2>"$RUNNER_TEMP/view.err")"; then
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::a published release already exists for this tag; refusing to change it"
+              exit 1
+            fi
+            echo "reusing the existing draft release"
+            gh release edit "$TAG_NAME" --title "$TAG_NAME" --notes-file RELEASE_NOTES.md
+          elif grep -q "release not found" "$RUNNER_TEMP/view.err"; then
+            gh release create "$TAG_NAME" \
+              --draft \
+              --verify-tag \
+              --title "$TAG_NAME" \
+              --notes-file RELEASE_NOTES.md
+          else
+            cat "$RUNNER_TEMP/view.err" >&2
+            exit 1
+          fi
 
   build:
-    needs: [ci]
-    uses: Project-Navi/.github/.github/workflows/_build-reusable.yml@b803d378bb9535feae4f877990fbc50352200247
-    with:
-      tag_name: ${{ github.event.release.tag_name }}
-      package_name: navi_sanitize
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
+    name: build wheel + sdist + SBOMs
+    needs: [guard, require-ci-green]
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.20"
+      - name: Build wheel and sdist
+        run: uv build --python 3.12 --out-dir dist
+      - name: Install the wheel alone for the SBOMs
+        # The package has no runtime dependencies, so the SBOMs describe exactly
+        # what `pip install navi-sanitize` installs.
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/sbom-env"
+          uv pip install --python "$RUNNER_TEMP/sbom-env/bin/python" --no-deps --no-index dist/*.whl
+      - name: Generate SBOM (CycloneDX)
+        run: >-
+          uvx --from cyclonedx-bom==4.6.1 cyclonedx-py environment "$RUNNER_TEMP/sbom-env"
+          --output-format JSON -o sbom.cdx.json
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@17ae1740179002c89186b61233e0f892c3118b11 # v0.23.0
+        with:
+          path: ${{ runner.temp }}/sbom-env
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      # overwrite: a re-run must replace this run's earlier artifact, not fail on it.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          overwrite: true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: |
+            sbom.cdx.json
+            sbom.spdx.json
+          if-no-files-found: error
+          overwrite: true
 
-  # Checks the exact downloaded release dist (tag/version, contents, installed
-  # behavior, sdist rebuild) before anything is uploaded. Read-only.
+  # Checks the exact built dist (tag/version, contents, installed behavior, sdist
+  # rebuild, twine check in the pinned publisher image) before anything is signed,
+  # staged or uploaded. Read-only.
   verify-dist:
-    needs: [build]
+    needs: [guard, build]
+    if: needs.guard.outputs.ok == 'true'
     uses: ./.github/workflows/verify-dist.yml
     with:
       artifact-name: dist
-      tag-name: ${{ github.event.release.tag_name }}
+      tag-name: ${{ github.ref_name }}
     permissions:
       contents: read
 
-  publish:
-    needs: [verify-dist]
+  attest:
+    name: GitHub artifact attestation (+ .sigstore.json bundle)
+    needs: [guard, verify-dist]
+    if: needs.guard.outputs.ok == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: pypi
     permissions:
-      id-token: write
+      contents: read
+      id-token: write # mint the Sigstore signing cert (OIDC)
+      attestations: write # persist the attestation to the store
+      artifact-metadata: write # create the artifact storage record
     steps:
-      - name: Download dist artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
-          path: dist/
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+          path: dist
+      - name: Attest build provenance for the wheel and sdist
+        id: attest
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          print-hash: true
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+      - name: Stage the Sigstore bundle as a release asset
+        env:
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: cp "$BUNDLE" "navi_sanitize-${VERSION}.sigstore.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sigstore-bundle
+          path: navi_sanitize-*.sigstore.json
+          if-no-files-found: error
+          overwrite: true
 
-  release-assets:
-    needs: [publish]
+  combine-hashes:
+    name: combine artifact digests for SLSA provenance
+    needs: [guard, verify-dist]
+    if: needs.guard.outputs.ok == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
     steps:
-      - name: Download dist artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist
-          path: dist/
+          path: dist
+      - name: Compute one combined base64 sha256sum over the SLSA subjects
+        id: hash
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          # `./*.glob` so a filename starting with `-` is never read as a flag.
+          echo "hashes=$(sha256sum ./*.whl ./*.tar.gz | base64 -w0)" >> "$GITHUB_OUTPUT"
 
-      - name: Download SBOM artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+  provenance:
+    name: SLSA Build-L3 provenance (.intoto.jsonl)
+    needs: [guard, combine-hashes]
+    if: needs.guard.outputs.ok == 'true'
+    permissions:
+      actions: read # detect the GitHub Actions build environment
+      id-token: write # Sigstore keyless signing of the provenance
+      contents: write # required by the reusable workflow's interface
+    # The SLSA generator must be referenced by version TAG, not SHA: it verifies its
+    # own ref to produce non-falsifiable provenance. The one deliberate exception to
+    # SHA pinning here.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses]
+    with:
+      base64-subjects: ${{ needs.combine-hashes.outputs.hashes }}
+      # Workflow artifact only; release-assets-draft stages it on the Release.
+      upload-assets: false
+      provenance-name: navi_sanitize-${{ needs.guard.outputs.version }}.intoto.jsonl
+
+  release-assets-draft:
+    name: stage assets on the DRAFT Release (does NOT un-draft)
+    needs: [guard, notes, verify-dist, attest, provenance]
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload assets to the draft Release
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: sbom
-          path: sbom/
-
-      - name: Upload to GitHub Release
+          path: dist
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sigstore-bundle
+          path: dist
+      - name: Collect workflow artifacts for SLSA provenance
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: provenance-artifacts
+      - name: Copy the SLSA provenance into the release dist
+        run: |
+          set -euo pipefail
+          mapfile -t provenance < <(find provenance-artifacts -type f -name '*.intoto.jsonl' | sort)
+          if [ "${#provenance[@]}" -ne 1 ]; then
+            printf '%s\n' "${provenance[@]}"
+            echo "::error::expected exactly one .intoto.jsonl provenance artifact, found ${#provenance[@]}"
+            exit 1
+          fi
+          cp "${provenance[0]}" dist/
+      - name: Attach distributables, SBOMs, signature and provenance to the draft Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "$TAG_NAME" dist/* sbom/* --clobber --repo "$GH_REPO"
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG_NAME" \
+            dist/*.whl \
+            dist/*.tar.gz \
+            dist/sbom.cdx.json \
+            dist/sbom.spdx.json \
+            dist/*.sigstore.json \
+            dist/*.intoto.jsonl \
+            --clobber
+
+  publish-pypi:
+    name: publish to PyPI
+    # Nothing is uploaded before verify-dist passes and the assets are staged.
+    needs: [guard, verify-dist, release-assets-draft]
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi # manual gate: required reviewer
+      url: https://pypi.org/p/navi-sanitize
+    permissions:
+      contents: read
+      id-token: write # Trusted Publishing (OIDC); PEP 740 attestations on by default
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: Publish to PyPI (Trusted Publishing; PEP 740 attestations)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist
+          print-hash: true
+          # A re-run after a successful upload must reach the hash check below
+          # instead of failing on files PyPI already has. Skipping is safe only
+          # because that check then requires PyPI to serve exactly these bytes.
+          skip-existing: true
+      - name: Verify PyPI serves exactly the staged files
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          import time
+          import urllib.request
+          from pathlib import Path
+
+          version = os.environ["VERSION"]
+          # Only the distributions: the publish action adds *.publish.attestation files.
+          local = {
+              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in Path("dist").iterdir()
+              if p.name.endswith((".whl", ".tar.gz"))
+          }
+          if len(local) != 2:
+              sys.exit(f"::error::expected one wheel and one sdist in dist/, found {sorted(local)}")
+          url = f"https://pypi.org/pypi/navi-sanitize/{version}/json"
+          served: dict[str, str] = {}
+          for attempt in range(20):  # the JSON API can lag the upload briefly
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as response:
+                      data = json.load(response)
+                  served = {f["filename"]: f["digests"]["sha256"] for f in data["urls"]}
+              except OSError as exc:
+                  print(f"attempt {attempt + 1}: {exc}")
+              if served == local:
+                  break
+              time.sleep(15)
+          if served != local:
+              sys.exit(f"::error::PyPI serves {served}, staged files are {local}")
+          print(f"PyPI serves exactly the staged files: {sorted(served)}")
+          PY
+
+  publish-github-release:
+    name: un-draft the GitHub Release (only after PyPI accepted the files)
+    needs: [guard, publish-pypi]
+    if: needs.guard.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # un-draft the Release
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+      - name: Publish the GitHub Release (un-draft)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release edit "$TAG_NAME" --draft=false
