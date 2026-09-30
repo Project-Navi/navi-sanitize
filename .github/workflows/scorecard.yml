@@ -11,7 +11,7 @@ permissions: {}
 
 jobs:
   scorecard:
-    uses: Project-Navi/.github/.github/workflows/scorecard.yml@e657c49944bf28e4b04c479ee722c4f6c4e10a9f
+    uses: Project-Navi/.github/.github/workflows/scorecard.yml@e4ab481f05f8d1129332dc7186ded2467219ef24
     permissions:
       contents: read
       security-events: write
